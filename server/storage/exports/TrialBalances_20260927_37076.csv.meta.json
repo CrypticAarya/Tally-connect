@@ -1,0 +1,12 @@
+{
+  "fileKey": "TrialBalances_20260927_37076.csv",
+  "filename": "TrialBalances_20260927_37076.csv",
+  "sizeBytes": 423,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T20:37:58.196Z",
+  "metadata": {
+    "dataset": "TRIAL_BALANCE",
+    "rowCount": 3,
+    "tenantId": "ten_default"
+  }
+}

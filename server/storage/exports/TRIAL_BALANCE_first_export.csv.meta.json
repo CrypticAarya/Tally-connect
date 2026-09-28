@@ -1,0 +1,12 @@
+{
+  "fileKey": "TRIAL_BALANCE_first_export.csv",
+  "filename": "TRIAL_BALANCE_first_export.csv",
+  "sizeBytes": 2645,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:24:22.040Z",
+  "metadata": {
+    "dataset": "TRIAL_BALANCE",
+    "rowCount": 50,
+    "tenantId": "ten_646f274ae2dc"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "fileKey": "SalesRegister_20260927_84cda.csv",
+  "filename": "SalesRegister_20260927_84cda.csv",
+  "sizeBytes": 1473,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T20:52:06.161Z",
+  "metadata": {
+    "dataset": "SALES_REGISTER",
+    "rowCount": 2,
+    "tenantId": "ten_5315fbd79570"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "tally-connect-server",
+  "version": "1.0.0",
+  "description": "Cloud API Server & Connector Service for Tally Connect",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "fast-csv": "^5.0.2",
+    "fast-xml-parser": "^5.11.1",
+    "pg": "^8.23.0"
+  }
+}

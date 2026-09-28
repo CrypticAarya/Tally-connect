@@ -1,0 +1,16 @@
+{
+  "name": "tally-connect-agent",
+  "version": "1.0.0-beta",
+  "description": "Standalone desktop connector agent for customer Windows host",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "install-wizard": "node src/installer.js",
+    "build": "node scripts/build.js"
+  },
+  "dependencies": {
+    "fast-csv": "^5.0.7",
+    "fast-xml-parser": "^5.0.8"
+  }
+}

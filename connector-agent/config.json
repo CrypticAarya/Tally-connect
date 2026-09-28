@@ -1,0 +1,8 @@
+{
+  "cloudUrl": "http://localhost:5001",
+  "connectorId": "conn_mumbai_hq_01",
+  "secret": "sec_beta_mumbai_9f8e7d",
+  "tallyHost": "127.0.0.1",
+  "tallyPort": 9000,
+  "heartbeatIntervalSeconds": 30
+}

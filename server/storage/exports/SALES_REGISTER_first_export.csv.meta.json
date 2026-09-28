@@ -1,0 +1,12 @@
+{
+  "fileKey": "SALES_REGISTER_first_export.csv",
+  "filename": "SALES_REGISTER_first_export.csv",
+  "sizeBytes": 2495,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:24:22.032Z",
+  "metadata": {
+    "dataset": "SALES_REGISTER",
+    "rowCount": 50,
+    "tenantId": "ten_39dc3b3cfc9c"
+  }
+}

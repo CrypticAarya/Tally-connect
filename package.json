@@ -1,0 +1,30 @@
+{
+  "name": "tally-connect",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Tally Connect: Middleware Platform connecting TallyPrime with SaaS applications",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "start:server": "npm --prefix server start",
+    "build:client": "npm --prefix client run build"
+  },
+  "keywords": [
+    "tally",
+    "tallyprime",
+    "middleware",
+    "saas",
+    "connector"
+  ],
+  "author": "Tally Connect Engineering Team",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "fast-csv": "^5.0.7",
+    "pg": "^8.23.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "fileKey": "CHART_OF_ACCOUNTS_first_export.csv",
+  "filename": "CHART_OF_ACCOUNTS_first_export.csv",
+  "sizeBytes": 2545,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:24:22.022Z",
+  "metadata": {
+    "dataset": "CHART_OF_ACCOUNTS",
+    "rowCount": 50,
+    "tenantId": "ten_0af92382e46e"
+  }
+}

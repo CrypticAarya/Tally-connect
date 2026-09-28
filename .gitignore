@@ -1,0 +1,8 @@
+node_modules/
+client/node_modules/
+client/dist/
+.DS_Store
+logs/*.log
+connector-agent/logs/*.log
+connector-agent/bin/
+scratch/
