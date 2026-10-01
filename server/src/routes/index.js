@@ -6,7 +6,6 @@ import internalRouter from './internal/index.js';
 import developerRouter from './developer/index.js';
 import docsRouter from './docs.js';
 import adminRouter from './admin/index.js';
-import legacyApiRouter from './apiRoutes.js';
 
 const router = express.Router();
 
@@ -24,8 +23,5 @@ router.post('/playground', (req, res, next) => {
   req.url = '/playground';
   developerRouter(req, res, next);
 });
-
-// Fallback to legacy routes to guarantee 100% backward compatibility
-router.use('/', legacyApiRouter);
 
 export default router;

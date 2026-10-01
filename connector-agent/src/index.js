@@ -1,3 +1,12 @@
+// Suppress Node 18 ExperimentalWarning for fetch
+const originalEmitWarning = process.emitWarning;
+process.emitWarning = function(warning, ...args) {
+  if (args[0] === 'ExperimentalWarning' || (typeof warning === 'string' && warning.includes('Fetch API')) || (warning && warning.name === 'ExperimentalWarning')) {
+    return;
+  }
+  return originalEmitWarning.call(process, warning, ...args);
+};
+
 import path from 'path';
 import fs from 'fs';
 import { ConnectorAgent } from './agent.js';
@@ -6,79 +15,194 @@ import { TallyClient } from './tallyClient.js';
 import { CloudClient } from './cloudClient.js';
 import { windowsService } from './windowsService.js';
 import { logger } from './logger.js';
+import { DEFAULT_PUBLIC_CLOUD_URL } from './cloudConfig.js';
+import { getAllEntities, getEntityById } from './extraction/entityRegistry.js';
+import { ExtractionService } from './extraction/extractionService.js';
+import { InteractiveExporter } from './extraction/interactiveExporter.js';
+import { LocalExportStorage, getDefaultExportDirectory } from './storage/localExportStorage.js';
 
 async function main() {
   const args = process.argv.slice(2);
-  const execName = path.basename(process.execPath || process.argv[0] || '');
+  const execPath = process.execPath || process.argv[0] || '';
+  const exeDir = (process.pkg && execPath) ? path.dirname(execPath) : process.cwd();
+  const execName = path.basename(execPath);
   const scriptName = path.basename(process.argv[1] || '');
-  const configArgIdx = args.findIndex(a => a === '--config');
-  let configPath = configArgIdx !== -1 ? path.resolve(args[configArgIdx + 1]) : path.resolve(process.cwd(), 'config.json');
 
+  const configArgIdx = args.findIndex(a => a === '--config');
   const targetDirIdx = args.findIndex(a => a === '--target-dir');
-  if (targetDirIdx !== -1) {
+
+  let configPath;
+  if (configArgIdx !== -1) {
+    configPath = path.resolve(args[configArgIdx + 1]);
+  } else if (targetDirIdx !== -1) {
     configPath = path.join(path.resolve(args[targetDirIdx + 1]), 'config.json');
+  } else if (fs.existsSync(path.join(exeDir, 'config.json'))) {
+    configPath = path.join(exeDir, 'config.json');
+  } else {
+    configPath = path.resolve(process.cwd(), 'config.json');
   }
 
   const isHelp = args.includes('--help') || args.includes('-h');
   const isStatus = args.includes('--status');
-  const hasCodeArg = args.includes('--code') || args.includes('-c') || args.some(a => /^TC-[A-Za-z0-9]{4,8}$/i.test(a));
-  const isSetupExecutable = execName.includes('Setup') || scriptName.includes('Setup');
-  const isInstall = args.includes('--install') || isSetupExecutable || hasCodeArg || !fs.existsSync(configPath);
+  const isListDatasets = args.includes('--list-datasets') || args.includes('--datasets');
+  const exportArgIdx = args.findIndex(a => a === '--export' || a === '-e');
+  const isExport = exportArgIdx !== -1;
+  const isDaemon = args.includes('--daemon') || args.includes('--background');
 
+  const hasCodeArg = args.includes('--code') || args.includes('-c') || args.some(a => /^TC-[A-Za-z0-9]{4,8}$/i.test(a));
+  // Mode 2 (SaaS Integration Mode) is ONLY activated via explicit CLI flags.
+  // Neither TallyConnectAgent.exe nor TallyConnectAgentSetup.exe will require activation
+  // unless explicitly invoked with --install, --cloud, --saas, or an activation code flag.
+  const isInstall = args.includes('--install') || args.includes('--cloud') || args.includes('--saas') || hasCodeArg;
+
+  // 1. HELP
   if (isHelp) {
     console.log(`
 ===============================================================
-  Tally Connect Agent — Windows Application
+  TALLY CONNECT — Real TallyPrime to CSV Exporter
 ===============================================================
 
 Usage:
-  TallyConnectAgentSetup.exe [options]
   TallyConnectAgent.exe [options]
+  TallyConnectAgentSetup.exe [options]
 
-Commands:
-  (default)            Start background agent daemon
-  --install            Launch customer setup wizard
-  --status             Display local TallyPrime and Cloud connection diagnostics
-  --help, -h           Display this help text
+Mode 1: Local Tally Extraction (Default, No Activation Required):
+  (no arguments)              Launch interactive dataset extraction UI
+  --export <list>             Extract specified datasets to CSV (e.g. ledgers,customers,trial_balance)
+  --list-datasets             List all 15 available Tally datasets
+  --from-date <YYYY-MM-DD>    Start date for reports (default: 2026-04-01)
+  --to-date <YYYY-MM-DD>      End date for reports (default: 2026-09-30)
+  --out-dir <directory>       Custom export directory (default: %APPDATA%\\TallyConnect\\exports)
+  --tally-port <port>         TallyPrime XML port (default: 9000)
 
-Options:
-  --code <TC-XXXX>     6-character activation code (e.g. TC-4829)
-  --cloud-url <url>    Tally Connect Cloud URL (default: http://localhost:5001)
-  --tally-port <port>  TallyPrime XML port (default: 9000)
-  --background         Run silently in background service mode
-  --non-interactive    Run wizard in non-interactive / headless mode
-  --no-start           Do not start background agent after setup
-  --target-dir <dir>   Installation directory (default: current directory)
-  --config <file>      Path to config.json
+Diagnostics & Status:
+  --status                    Display local TallyPrime and Cloud diagnostics
+  --help, -h                  Display this help text
+
+Mode 2: SaaS Integration (Optional Cloud Linking):
+  --install                   Launch customer cloud setup wizard
+  --code <TC-XXXX>            6-character cloud activation code
+  --daemon, --background      Start background cloud sync daemon
+  --cloud-url <url>           Tally Connect Cloud URL (default: ${DEFAULT_PUBLIC_CLOUD_URL})
+  --config <file>             Path to config.json
     `);
     process.exit(0);
   }
 
-  if (isStatus) {
-    console.log('\n--- Tally Connect Status ---');
-    if (!fs.existsSync(configPath)) {
-      console.log('✖ Setup has not been completed. Please run TallyConnectAgentSetup.exe.');
-      process.exit(1);
+  // 2. LIST DATASETS
+  if (isListDatasets) {
+    console.log('\n===============================================================');
+    console.log('  AVAILABLE TALLY DATASETS (15 Scope Datasets)');
+    console.log('===============================================================\n');
+    const entities = getAllEntities();
+    for (const e of entities) {
+      const paramStr = e.parameters?.length ? ` (Parameters: ${e.parameters.map(p => p.name).join(', ')})` : '';
+      console.log(`  • ${e.id.padEnd(16, ' ')} [${e.category.toUpperCase().padEnd(11, ' ')}] ${e.name}${paramStr}`);
     }
-
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    console.log(`Company:       ${config.companyName || 'Not configured'}`);
-    console.log(`Status:        ${config.status || 'ACTIVE'}`);
-
-    const tallyClient = new TallyClient({ host: config.tallyHost || '127.0.0.1', port: config.tallyPort || 9000 });
-    const tallyStatus = await tallyClient.checkStatus();
-    console.log(`TallyPrime:    ${tallyStatus.online ? 'Connected' : 'Not open'}`);
-    if (tallyStatus.activeCompany) console.log(`Open Company:  ${tallyStatus.activeCompany}`);
-
-    const cloudClient = new CloudClient({ cloudUrl: config.cloudUrl });
-    const health = await cloudClient.checkHealth();
-    console.log(`Cloud Service: ${health.success ? 'Connected' : 'Offline'}`);
-    console.log(`Auto-Start:    ${windowsService.isAutoStartEnabled() ? 'Enabled' : 'Disabled'}`);
+    console.log('\nExample usage:');
+    console.log('  TallyConnectAgent.exe --export ledgers,customers,trial_balance\n');
     process.exit(0);
   }
 
-  // If setup mode (Setup.exe, --install, or no config.json)
-  if (isInstall && !args.includes('--background')) {
+  // 3. STATUS
+  if (isStatus) {
+    console.log('\n--- Tally Connect Status ---');
+    const tallyClient = new TallyClient({
+      host: '127.0.0.1',
+      port: 9000
+    });
+    const tallyStatus = await tallyClient.checkStatus();
+    console.log(`TallyPrime Status: ${tallyStatus.online ? 'Online (Port ' + tallyStatus.port + ')' : 'Offline'}`);
+    if (tallyStatus.online) {
+      console.log(`Active Company:    ${tallyStatus.activeCompany || "None detected (Open a company in TallyPrime)"}`);
+    } else {
+      console.log(`Notice:            ${tallyStatus.message || 'TallyPrime is not running.'}`);
+    }
+
+    if (fs.existsSync(configPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        console.log(`Configured Tenant: ${config.companyName || 'None'}`);
+        console.log(`Agent Status:      ${config.status || 'ACTIVE'}`);
+        const cloudClient = new CloudClient({ cloudUrl: config.cloudUrl });
+        const health = await cloudClient.checkHealth();
+        console.log(`Cloud Service:     ${health.success ? 'Connected' : 'Offline'}`);
+      } catch (_) {}
+    }
+    console.log(`Export Directory:  ${getDefaultExportDirectory()}`);
+    process.exit(0);
+  }
+
+  // 4. CLI EXPORT MODE (--export ledgers,customers,trial_balance)
+  if (isExport) {
+    const rawEntities = args[exportArgIdx + 1];
+    if (!rawEntities || rawEntities.startsWith('-')) {
+      console.error('✖ Error: Please specify dataset IDs to export, e.g. --export ledgers,customers,trial_balance');
+      console.error('Run --list-datasets to view available options.');
+      process.exit(1);
+    }
+
+    const fromDateIdx = args.findIndex(a => a === '--from-date');
+    const toDateIdx = args.findIndex(a => a === '--to-date');
+    const outDirIdx = args.findIndex(a => a === '--out-dir');
+    const tallyPortIdx = args.findIndex(a => a === '--tally-port');
+
+    const params = {
+      fromDate: fromDateIdx !== -1 ? args[fromDateIdx + 1] : '2026-04-01',
+      toDate: toDateIdx !== -1 ? args[toDateIdx + 1] : '2026-09-30'
+    };
+
+    const outDir = outDirIdx !== -1 ? path.resolve(args[outDirIdx + 1]) : null;
+    const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : 9000;
+
+    const exportStorage = outDir ? new LocalExportStorage({ baseDir: outDir }) : undefined;
+    const extractionService = new ExtractionService({
+      port: tallyPort,
+      exportStorage
+    });
+
+    const entityList = rawEntities.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+    try {
+      console.log(`\nConnecting to TallyPrime port ${tallyPort}...`);
+      const companyInfo = await extractionService.detectActiveCompany();
+      console.log(`✔ Active Company: "${companyInfo.companyName}"`);
+      params.companyName = companyInfo.companyName;
+      console.log(`\nExporting ${entityList.length} dataset(s)...`);
+
+      const results = [];
+      let totalRecords = 0;
+
+      for (const id of entityList) {
+        process.stdout.write(`  Processing ${id}... `);
+        const res = await extractionService.extractEntity(id, params);
+        results.push(res);
+        totalRecords += res.recordCount;
+        console.log(`✔ ${res.recordCount} records -> ${res.filename}`);
+      }
+
+      console.log('\n===============================================================');
+      console.log('EXPORT COMPLETE');
+      console.log('===============================================================');
+      console.log(`Company:       ${companyInfo.companyName}`);
+      console.log(`Datasets:      ${results.length}`);
+      console.log(`Total Records: ${totalRecords}`);
+      console.log('\nFiles created:');
+      for (const r of results) {
+        console.log(`  ✓ ${r.filename} (${r.recordCount} records, ${(r.sizeBytes / 1024).toFixed(1)} KB)`);
+      }
+      console.log(`\nSaved to:`);
+      console.log(`  ${extractionService.exportStorage.getBaseDir()}`);
+      console.log('===============================================================\n');
+      process.exit(0);
+    } catch (err) {
+      console.error(`\n✖ Export failed: ${err.message}\n`);
+      process.exit(1);
+    }
+  }
+
+  // 5. CLOUD SETUP / INSTALLER MODE (--install, Setup.exe, or --code)
+  if (isInstall && !isDaemon) {
     const installArgs = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--code' || args[i] === '-c') installArgs.activationCode = args[++i];
@@ -90,30 +214,52 @@ Options:
       if (args[i] === '--no-start' || args[i] === '--exit-after-install') installArgs.startAgent = false;
     }
 
+    const targetDir = installArgs.targetDir || (targetDirIdx !== -1 ? path.resolve(args[targetDirIdx + 1]) : exeDir);
+
     const installer = new Installer({
-      targetDir: installArgs.targetDir || (targetDirIdx !== -1 ? path.resolve(args[targetDirIdx + 1]) : process.cwd()),
+      targetDir,
       interactive: installArgs.interactive !== false
     });
 
-    await installer.run(installArgs);
+    try {
+      const res = await installer.run(installArgs);
+      if (!res || res.success === false) {
+        process.exit(1);
+      }
+      return;
+    } catch {
+      process.exit(1);
+    }
+  }
+
+  // 6. CLOUD DAEMON MODE (--daemon / --background)
+  if (isDaemon) {
+    if (!fs.existsSync(configPath)) {
+      console.error(`✖ Error: Configuration missing at ${configPath}. Please run with --install first.`);
+      process.exit(1);
+    }
+    const agent = new ConnectorAgent(configPath);
+    await agent.start();
+
+    process.on('SIGINT', () => {
+      agent.stop();
+      process.exit(0);
+    });
+    process.on('SIGTERM', () => {
+      agent.stop();
+      process.exit(0);
+    });
     return;
   }
 
-  // Default: Start silent background agent daemon
-  const agent = new ConnectorAgent(configPath);
-  await agent.start();
-
-  process.on('SIGINT', () => {
-    agent.stop();
-    process.exit(0);
-  });
-  process.on('SIGTERM', () => {
-    agent.stop();
-    process.exit(0);
-  });
+  // 7. DEFAULT WORKFLOW: INTERACTIVE TALLY -> CSV EXPORTER
+  // (Double-clicked or run from console without flags)
+  const interactiveExporter = new InteractiveExporter();
+  await interactiveExporter.run();
 }
 
 main().catch(err => {
   logger.error('Fatal agent error:', err);
+  console.error('\n✖ Fatal Error:', err.message);
   process.exit(1);
 });

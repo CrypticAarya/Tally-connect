@@ -173,7 +173,7 @@ export class TdlBuilder {
     <VERSION>1</VERSION>
     <TALLYREQUEST>Export</TALLYREQUEST>
     <TYPE>Collection</TYPE>
-    <ID>AllLedgersCollection</ID>
+    <ID>Collection of Ledgers</ID>
   </HEADER>
   <BODY>
     <DESC>
@@ -182,7 +182,7 @@ export class TdlBuilder {
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="AllLedgersCollection">
+          <COLLECTION NAME="Collection of Ledgers">
             <TYPE>Ledger</TYPE>
             <FETCH>
               GUID, NAME, PARENT, DESCRIPTION, OPENINGBALANCE, CLOSINGBALANCE,
@@ -602,11 +602,42 @@ export class TdlBuilder {
   }
 
   /**
-   * Request to extract Trial Balance balances
+   * Request to extract official Trial Balance Report (TYPE = Data, ID = TrialBalance)
+   * Uses EXPLODEFLAG=Yes and SVCurrentCompany per official Tally XML specifications
    */
   static buildTrialBalanceRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
-    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const toDate = formatTallyDate(options.toDate || '2026-09-30');
+    const company = options.companyName || options.company || '';
+    const companyTag = company ? `\n        <SVCurrentCompany>${company}</SVCurrentCompany>` : '';
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>TrialBalance</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <EXPLODEFLAG>Yes</EXPLODEFLAG>${companyTag}
+      </STATICVARIABLES>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Collection-based fallback request for Trial Balance ledger balances
+   */
+  static buildTrialBalanceCollectionRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2026-09-30');
 
     return `
 <ENVELOPE>

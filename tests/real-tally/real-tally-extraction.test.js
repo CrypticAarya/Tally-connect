@@ -1,7 +1,12 @@
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { TallyClient } from '../../connector-agent/src/tallyClient.js';
 import { TallyXmlHttpAdapter } from '../../connector-agent/src/adapters/tallyXmlHttpAdapter.js';
 import { JsonTransformer } from '../../connector-agent/src/engine/jsonTransformer.js';
+import { Transformer } from '../../connector-agent/src/engine/transformer.js';
+import { CsvExporter } from '../../connector-agent/src/export/csvExporter.js';
+import { LocalExportStorage } from '../../connector-agent/src/storage/localExportStorage.js';
 import { SyncWorker } from '../../connector-agent/src/syncWorker.js';
 import { CloudClient } from '../../connector-agent/src/cloudClient.js';
 import { pool } from '../../server/src/db/mysql.js';
@@ -330,7 +335,7 @@ function createTallyXmlServer(port = 9000) {
       }
 
       // General Ledgers / Chart of Accounts
-      if (body.includes('AllLedgersCollection') || body.includes('TrialBalanceLedgersCollection')) {
+      if (body.includes('AllLedgersCollection') || body.includes('TrialBalanceLedgersCollection') || body.includes('Collection of Ledgers') || body.includes('ChartOfAccountsCollection')) {
         res.end(`
 <ENVELOPE>
   <HEADER><VERSION>1</VERSION><STATUS>1</STATUS></HEADER>
@@ -354,6 +359,66 @@ function createTallyXmlServer(port = 9000) {
           <ISREVENUE>Yes</ISREVENUE>
         </LEDGER>
       </COLLECTION>
+    </DATA>
+  </BODY>
+</ENVELOPE>`.trim());
+        return;
+      }
+
+      // Trial Balance (Report Request TYPE=Data, ID=TrialBalance)
+      if (body.includes('TrialBalance')) {
+        res.end(`
+<ENVELOPE>
+  <HEADER><VERSION>1</VERSION><STATUS>1</STATUS></HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">20260401</SVFROMDATE>
+        <SVTODATE TYPE="Date">20260930</SVTODATE>
+      </STATICVARIABLES>
+    </DESC>
+    <DATA>
+      <DSPRECORD>
+        <DSPACCNAME>Capital Account</DSPACCNAME>
+        <DSPGROUPNAME>Capital Account</DSPGROUPNAME>
+        <DSPOPDRBAL>0.00</DSPOPDRBAL>
+        <DSPOPCRBAL>5000000.00</DSPOPCRBAL>
+        <DSPDRAMT>0.00</DSPDRAMT>
+        <DSPCRAMT>0.00</DSPCRAMT>
+        <DSPCLDRAMT>0.00</DSPCLDRAMT>
+        <DSPCLCRAMT>5000000.00</DSPCLCRAMT>
+      </DSPRECORD>
+      <DSPRECORD>
+        <DSPACCNAME>HDFC Bank Operating Account</DSPACCNAME>
+        <DSPGROUPNAME>Bank Accounts</DSPGROUPNAME>
+        <DSPOPDRBAL>1500000.00</DSPOPDRBAL>
+        <DSPOPCRBAL>0.00</DSPOPCRBAL>
+        <DSPDRAMT>2450000.00</DSPDRAMT>
+        <DSPCRAMT>1100000.00</DSPCRAMT>
+        <DSPCLDRAMT>2850000.00</DSPCLDRAMT>
+        <DSPCLCRAMT>0.00</DSPCLCRAMT>
+      </DSPRECORD>
+      <DSPRECORD>
+        <DSPACCNAME>Apex Engineering Works</DSPACCNAME>
+        <DSPGROUPNAME>Sundry Debtors</DSPGROUPNAME>
+        <DSPOPDRBAL>125000.00</DSPOPDRBAL>
+        <DSPOPCRBAL>0.00</DSPOPCRBAL>
+        <DSPDRAMT>220000.00</DSPDRAMT>
+        <DSPCRAMT>0.00</DSPCRAMT>
+        <DSPCLDRAMT>345000.00</DSPCLDRAMT>
+        <DSPCLCRAMT>0.00</DSPCLCRAMT>
+      </DSPRECORD>
+      <DSPRECORD>
+        <DSPACCNAME>Precision Hydraulics Spares Ltd</DSPACCNAME>
+        <DSPGROUPNAME>Sundry Creditors</DSPGROUPNAME>
+        <DSPOPDRBAL>0.00</DSPOPDRBAL>
+        <DSPOPCRBAL>240000.00</DSPOPCRBAL>
+        <DSPDRAMT>0.00</DSPDRAMT>
+        <DSPCRAMT>172000.00</DSPCRAMT>
+        <DSPCLDRAMT>0.00</DSPCLDRAMT>
+        <DSPCLCRAMT>412000.00</DSPCLCRAMT>
+      </DSPRECORD>
     </DATA>
   </BODY>
 </ENVELOPE>`.trim());
@@ -636,6 +701,48 @@ async function run() {
     assert(rawDeliveryNotes.length > 0, `Extracted ${rawDeliveryNotes.length} Delivery Notes`);
     const rawReceiptNotes = await prodAdapter.fetchReceiptNotes();
     assert(rawReceiptNotes.length > 0, `Extracted ${rawReceiptNotes.length} Receipt Notes`);
+
+    // -------------------------------------------------------------
+    // Validation 6b: ✓ First Real-Tally Test: Ledgers, Customers, Trial Balance -> CSV
+    // -------------------------------------------------------------
+    logStep('Validation 6b: ✓ First Real-Tally Test (Ledgers, Customers, Trial Balance) -> CSV');
+
+    // 1. Trial Balance extraction with date range verification
+    const rawTrialBalance = await prodAdapter.fetchTrialBalance({
+      fromDate: '2026-04-01',
+      toDate: '2026-09-30'
+    });
+    assert(rawTrialBalance.length > 0, `Extracted ${rawTrialBalance.length} Trial Balance line items`);
+    assert(rawTrialBalance.dateRangeVerification?.verified === true, 'Trial Balance date range 2026-04-01 to 2026-09-30 verified in Tally response');
+
+    const tbCsvRows = Transformer.transform('trial_balance', rawTrialBalance);
+    assert(tbCsvRows.length === 4, 'Transformed 4 Trial Balance rows with Debit/Credit columns');
+    assert(tbCsvRows[0]['Ledger Name'] === 'Capital Account', 'Capital Account line item verified');
+    assert(tbCsvRows[0]['Closing Credit'] === '5000000.00', 'Capital Account closing credit matches');
+
+    // 2. CSV Exports to test directory
+    const testExportDir = path.resolve(process.cwd(), 'tests', 'real-tally', 'temp_csv_exports');
+    if (fs.existsSync(testExportDir)) fs.rmSync(testExportDir, { recursive: true, force: true });
+    fs.mkdirSync(testExportDir, { recursive: true });
+    const localStore = new LocalExportStorage({ baseDir: testExportDir });
+
+    const tbExport = await CsvExporter.exportToStorage('trial_balance', tbCsvRows, {
+      storage: localStore,
+      fromDate: '2026-04-01',
+      toDate: '2026-09-30'
+    });
+    assert(fs.existsSync(tbExport.filePath), `Trial Balance CSV created: ${tbExport.filename}`);
+
+    const ledgerCsvRows = Transformer.transform('ledgers', rawLedgers);
+    const ledExport = await CsvExporter.exportToStorage('ledgers', ledgerCsvRows, { storage: localStore });
+    assert(fs.existsSync(ledExport.filePath), `Ledgers CSV created: ${ledExport.filename}`);
+
+    const customerCsvRows = Transformer.transform('customers', rawCustomers);
+    const custExport = await CsvExporter.exportToStorage('customers', customerCsvRows, { storage: localStore });
+    assert(fs.existsSync(custExport.filePath), `Customers CSV created: ${custExport.filename}`);
+
+    // Clean test exports
+    fs.rmSync(testExportDir, { recursive: true, force: true });
 
     // -------------------------------------------------------------
     // Validation 7: ✓ Permissions respected

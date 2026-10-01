@@ -2,7 +2,6 @@ import { tallyAdapter } from '../adapters/index.js';
 import { Transformer, CsvExporter, normalizeDatasetKey, getSchema } from '../engine/index.js';
 import { exportStorage } from '../storage/index.js';
 import { config } from '../config.js';
-import { Repository } from '../db/repository.js';
 
 export class ConnectorService {
   constructor(options = {}) {
@@ -98,12 +97,6 @@ export class ConnectorService {
     this.lastHeartbeat = new Date().toISOString();
     this._log('info', `Desktop agent "${connectorId}" registered from host "${this.machineName}"`);
 
-    try {
-      await Repository.registerConnector(this.agentId, this.machineName);
-    } catch (err) {
-      this._log('warn', `DB registration update note: ${err.message}`);
-    }
-
     return {
       success: true,
       registered: true,
@@ -129,18 +122,6 @@ export class ConnectorService {
     }
     this.lastHeartbeat = timestamp || new Date().toISOString();
     this._log('info', `Heartbeat from [${this.machineName}] -> Tally: ${tallyStatus} ("${this.activeCompany}")`);
-
-    try {
-      await Repository.updateHeartbeat(this.agentId, {
-        machineName: this.machineName,
-        tallyStatus,
-        activeCompany: this.activeCompany,
-        agentVersion,
-        lastError
-      });
-    } catch (err) {
-      // Non-fatal for heartbeat response
-    }
 
     return {
       acknowledged: true,
@@ -281,14 +262,6 @@ export class ConnectorService {
    * Retrieves a job by ID
    */
   async getJob(jobId, tenantId = null) {
-    try {
-      const dbJob = await Repository.getJobById(jobId, tenantId);
-      if (dbJob) {
-        dbJob.downloadUrl = `/api/exports/${dbJob.id}/download`;
-        return dbJob;
-      }
-    } catch {}
-
     const job = this.jobs.get(jobId);
     if (!job) {
       throw new Error(`Job "${jobId}" not found`);
@@ -296,6 +269,7 @@ export class ConnectorService {
     if (tenantId && job.tenantId && job.tenantId !== tenantId) {
       throw new Error(`Access denied: Job belongs to another tenant`);
     }
+    job.downloadUrl = `/api/exports/${job.id}/download`;
     return job;
   }
 
@@ -310,45 +284,24 @@ export class ConnectorService {
 
     const schema = getSchema(datasetKey);
     const connectorId = targetConnectorId || this.agentId;
+    const effectiveTenantId = tenantId || 'ten_default';
 
-    let effectiveTenantId = tenantId;
-    if (!effectiveTenantId) {
-      try {
-        const conn = await Repository.findConnector(connectorId);
-        effectiveTenantId = conn?.tenantId || 'ten_default';
-      } catch {
-        effectiveTenantId = 'ten_default';
-      }
-    }
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const jobRecord = {
+      id: jobId,
+      jobId,
+      tenantId: effectiveTenantId,
+      connectorId,
+      dataset: datasetKey,
+      datasetName: schema.displayName,
+      filters: filters || {},
+      status: 'PENDING',
+      rowCount: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      downloadUrl: `/api/exports/${jobId}/download`
+    };
 
-    let jobRecord;
-    try {
-      jobRecord = await Repository.createExportJob({
-        tenantId: effectiveTenantId,
-        connectorId,
-        dataset: datasetKey,
-        filters
-      });
-    } catch (err) {
-      this._log('warn', `DB createExportJob fallback: ${err.message}`);
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      jobRecord = {
-        id: jobId,
-        jobId,
-        tenantId: effectiveTenantId,
-        connectorId,
-        dataset: datasetKey,
-        datasetName: schema.displayName,
-        filters: filters || {},
-        status: 'PENDING',
-        rowCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-    }
-
-    jobRecord.datasetName = schema.displayName;
-    jobRecord.jobId = jobRecord.id;
     this.jobs.set(jobRecord.id, jobRecord);
     this._log('info', `Created export job "${jobRecord.id}" for "${datasetKey}" (Tenant: ${effectiveTenantId}, Connector: ${connectorId})`);
     return jobRecord;
@@ -358,15 +311,6 @@ export class ConnectorService {
    * Returns list of pending jobs for a specific connector with tenant isolation
    */
   async getPendingJobs(connectorId = null, tenantId = null) {
-    if (connectorId && tenantId) {
-      try {
-        const dbJobs = await Repository.getPendingJobsForConnector(connectorId, tenantId);
-        return dbJobs;
-      } catch (err) {
-        this._log('warn', `DB getPendingJobs failed: ${err.message}`);
-      }
-    }
-
     return Array.from(this.jobs.values()).filter(job => {
       const matchTenant = !tenantId || job.tenantId === tenantId;
       const matchConnector = !connectorId || job.connectorId === connectorId || job.connectorId === this.agentId;
@@ -380,13 +324,7 @@ export class ConnectorService {
   async updateJobStatus(jobId, payload = {}, connectorId = null, tenantId = null) {
     const { status, rowCount, filename, csvContent, preview, error } = payload;
 
-    // Check memory or DB for current job record
-    let job = this.jobs.get(jobId);
-    if (!job) {
-      try {
-        job = await Repository.getJobById(jobId);
-      } catch {}
-    }
+    const job = this.jobs.get(jobId);
     if (!job) {
       throw new Error(`Job "${jobId}" not found`);
     }
@@ -412,43 +350,19 @@ export class ConnectorService {
       sizeBytes = record.sizeBytes;
     }
 
-    // Update in DB
-    let updatedJob = null;
-    try {
-      updatedJob = await Repository.updateJobStatus(
-        jobId,
-        connectorId || job.connectorId,
-        tenantId || job.tenantId,
-        {
-          status,
-          rowCount,
-          filename,
-          fileKey,
-          sizeBytes,
-          preview,
-          error
-        }
-      );
-    } catch (err) {
-      if (err.code === 'TENANT_ISOLATION_VIOLATION') throw err;
-      this._log('warn', `DB updateJobStatus error: ${err.message}`);
-    }
+    job.status = status;
+    job.rowCount = rowCount != null ? Number(rowCount) : job.rowCount;
+    job.filename = filename || job.filename;
+    job.fileKey = fileKey;
+    job.sizeBytes = sizeBytes;
+    job.preview = preview || job.preview;
+    job.error = error || job.error;
+    job.updatedAt = new Date().toISOString();
+    if (status === 'COMPLETED') job.completedAt = new Date().toISOString();
+    job.downloadUrl = `/api/exports/${jobId}/download`;
 
-    if (!updatedJob) {
-      job.status = status;
-      job.rowCount = rowCount != null ? Number(rowCount) : job.rowCount;
-      job.filename = filename || job.filename;
-      job.fileKey = fileKey;
-      job.sizeBytes = sizeBytes;
-      job.preview = preview || job.preview;
-      job.error = error || job.error;
-      job.updatedAt = new Date().toISOString();
-      if (status === 'COMPLETED') job.completedAt = new Date().toISOString();
-      updatedJob = job;
-    }
-
-    updatedJob.downloadUrl = `/api/exports/${jobId}/download`;
-    this.jobs.set(jobId, updatedJob);
+    this.jobs.set(jobId, job);
+    return job;
 
     if (status === 'PROCESSING') {
       this._log('info', `Job "${jobId}" is now PROCESSING on connector "${job.connectorId}"`);

@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { TdlBuilder } from './adapters/tdlBuilder.js';
 
 export class TallyClient {
   constructor(options = {}) {
@@ -16,42 +17,12 @@ export class TallyClient {
   }
 
   /**
-   * Builds the minimal TDL XML request to probe Tally and extract the active company
-   */
-  _buildProbeEnvelope() {
-    return `
-<ENVELOPE>
-  <HEADER>
-    <VERSION>1</VERSION>
-    <TALLYREQUEST>Export</TALLYREQUEST>
-    <TYPE>Collection</TYPE>
-    <ID>ActiveCompanyProbe</ID>
-  </HEADER>
-  <BODY>
-    <DESC>
-      <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-      </STATICVARIABLES>
-      <TDL>
-        <TDLMESSAGE>
-          <COLLECTION NAME="ActiveCompanyProbe">
-            <TYPE>Company</TYPE>
-            <FETCH>NAME, GUID, STARTINGFROM, ENDINGAT</FETCH>
-          </COLLECTION>
-        </TDLMESSAGE>
-      </TDL>
-    </DESC>
-  </BODY>
-</ENVELOPE>`.trim();
-  }
-
-  /**
    * Connects to local TallyPrime XML server, checks availability, and detects active company
    * @returns {Promise<{ online: boolean, port: number, activeCompany: string|null, latencyMs: number, error?: string }>}
    */
   async checkStatus() {
     const startTime = Date.now();
-    const payload = this._buildProbeEnvelope();
+    const payload = TdlBuilder.buildCompanyRequest();
 
     try {
       const response = await fetch(this.baseUrl, {
@@ -81,15 +52,26 @@ export class TallyClient {
 
       let companyName = null;
       if (Array.isArray(companyNode) && companyNode.length > 0) {
-        companyName = companyNode[0].NAME || companyNode[0]['@_NAME'];
+        companyName = companyNode[0].NAME || companyNode[0]['@_NAME'] || null;
       } else if (companyNode) {
-        companyName = companyNode.NAME || companyNode['@_NAME'];
+        companyName = companyNode.NAME || companyNode['@_NAME'] || null;
+      }
+
+      if (!companyName || companyName === 'No Company Loaded') {
+        return {
+          online: true,
+          port: this.port,
+          activeCompany: null,
+          latencyMs: Date.now() - startTime,
+          error: 'NO_ACTIVE_COMPANY',
+          message: "We couldn't identify the active Tally company. Please open a company in TallyPrime and try again."
+        };
       }
 
       return {
         online: true,
         port: this.port,
-        activeCompany: companyName || 'Default Company',
+        activeCompany: companyName,
         latencyMs: Date.now() - startTime
       };
     } catch (err) {

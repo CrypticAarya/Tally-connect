@@ -7,6 +7,7 @@ import { HeartbeatService } from './heartbeat.js';
 import { JobProcessor } from './jobProcessor.js';
 import { SyncWorker } from './syncWorker.js';
 import { logger } from './logger.js';
+import { resolveCloudUrl } from './cloudConfig.js';
 
 export const AGENT_VERSION = '1.0.0-beta';
 
@@ -45,6 +46,10 @@ export class ConnectorAgent {
     const hasNewAuth = Boolean(this.config.connectionId && this.config.agentToken);
     const hasLegacyAuth = Boolean(this.config.connectorId && this.config.secret);
 
+    if (!this.config.cloudUrl) {
+      this.config.cloudUrl = resolveCloudUrl(null, this.configPath);
+    }
+
     if (!this.config.cloudUrl || (!hasNewAuth && !hasLegacyAuth)) {
       throw new Error('config.json missing required connection credentials');
     }
@@ -61,7 +66,7 @@ export class ConnectorAgent {
     }
 
     const code = activationCode.trim().toUpperCase();
-    const cloudUrl = options.cloudUrl || process.env.AGENT_CLOUD_URL || process.env.CLOUD_URL || (process.env.API_DOMAIN ? `https://${process.env.API_DOMAIN}` : 'http://127.0.0.1:5001');
+    const cloudUrl = resolveCloudUrl(options.cloudUrl, this.configPath);
     const tallyHost = options.tallyHost || '127.0.0.1';
     const tallyPort = Number(options.tallyPort || 9000);
 

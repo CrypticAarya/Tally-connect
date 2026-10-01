@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { getSystemErrorLogPath } from './cloudConfig.js';
+
+import { getDefaultLogDirectory } from './storage/localExportStorage.js';
 
 export class Logger {
   constructor(options = {}) {
-    this.logsDir = options.logsDir || path.resolve(process.cwd(), 'logs');
+    this.logsDir = options.logsDir || getDefaultLogDirectory();
     this.agentLogPath = path.join(this.logsDir, 'agent.log');
     this.errorLogPath = path.join(this.logsDir, 'errors.log');
     this.consoleOutput = options.consoleOutput !== false;
@@ -53,6 +56,19 @@ export class Logger {
     }
   }
 
+  _appendSystemError(content) {
+    try {
+      const sysPath = getSystemErrorLogPath();
+      const sysDir = path.dirname(sysPath);
+      if (!fs.existsSync(sysDir)) {
+        fs.mkdirSync(sysDir, { recursive: true });
+      }
+      fs.appendFileSync(sysPath, content, 'utf-8');
+    } catch (_) {
+      // Fallback ignored
+    }
+  }
+
   info(message, meta = null) {
     const formatted = this._format('INFO', message, meta);
     this._appendFile(this.agentLogPath, formatted);
@@ -65,6 +81,7 @@ export class Logger {
     const formatted = this._format('WARN', message, meta);
     this._appendFile(this.agentLogPath, formatted);
     this._appendFile(this.errorLogPath, formatted);
+    this._appendSystemError(formatted);
     if (this.consoleOutput) {
       console.warn(`[WARN] ⚠ ${message}`);
     }
@@ -74,6 +91,7 @@ export class Logger {
     const formatted = this._format('ERROR', message, meta);
     this._appendFile(this.agentLogPath, formatted);
     this._appendFile(this.errorLogPath, formatted);
+    this._appendSystemError(formatted);
     if (this.consoleOutput) {
       console.error(`[ERROR] ✖ ${message}`);
       if (meta && meta.stack) {

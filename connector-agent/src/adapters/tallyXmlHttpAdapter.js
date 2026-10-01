@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import { TallyAdapter } from './tallyAdapter.js';
 import { TdlBuilder } from './tdlBuilder.js';
 import { TallyXmlParser } from './xmlParser.js';
+import { getDefaultDebugDirectory } from '../storage/localExportStorage.js';
 
 export class TallyXmlHttpAdapter extends TallyAdapter {
   /**
@@ -8,12 +11,14 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * @param {string} [options.host] - Tally host (defaults to 127.0.0.1)
    * @param {number} [options.port] - Tally HTTP port (defaults to 9000)
    * @param {number} [options.timeoutMs] - Request timeout (default: 6000ms)
+   * @param {string} [options.debugDir] - Directory to persist raw XML requests/responses
    */
   constructor(options = {}) {
     super();
     this.host = options.host || '127.0.0.1';
     this.port = options.port || 9000;
     this.timeoutMs = options.timeoutMs ?? 6000;
+    this.debugDir = options.debugDir || getDefaultDebugDirectory();
 
     this.parser = new TallyXmlParser();
     this.baseUrl = `http://${this.host}:${this.port}`;
@@ -21,11 +26,37 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
   }
 
   /**
+   * Saves raw XML payload to debug directory for developer inspection
+   */
+  _saveDebugXml(filename, content) {
+    try {
+      if (!fs.existsSync(this.debugDir)) {
+        fs.mkdirSync(this.debugDir, { recursive: true });
+      }
+      fs.writeFileSync(path.join(this.debugDir, filename), content, 'utf-8');
+    } catch (_) {
+      try {
+        const fallback = path.resolve(process.cwd(), 'debug', 'raw_xml');
+        if (!fs.existsSync(fallback)) {
+          fs.mkdirSync(fallback, { recursive: true });
+        }
+        fs.writeFileSync(path.join(fallback, filename), content, 'utf-8');
+      } catch (__) {
+        // Non-blocking debug capture
+      }
+    }
+  }
+
+  /**
    * Core HTTP POST dispatcher to TallyPrime port 9000
    * @param {string} xmlPayload - TDL envelope
+   * @param {string} [entityTag='request'] - Identifying tag for debug logs
    * @returns {Promise<string>} Raw XML response text
    */
-  async _sendTallyPost(xmlPayload) {
+  async _sendTallyPost(xmlPayload, entityTag = 'request') {
+    const timestamp = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+    this._saveDebugXml(`raw_request_${entityTag}_${timestamp}.xml`, xmlPayload);
+
     try {
       const response = await fetch(this.baseUrl, {
         method: 'POST',
@@ -41,7 +72,9 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
         throw new Error(`TallyPrime returned HTTP error: ${response.status} ${response.statusText}`);
       }
 
-      return await response.text();
+      const rawResponse = await response.text();
+      this._saveDebugXml(`raw_response_${entityTag}_${timestamp}.xml`, rawResponse);
+      return rawResponse;
     } catch (err) {
       const isConnectionIssue =
         err.name === 'AbortError' ||
@@ -79,12 +112,13 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
     const xmlRequest = TdlBuilder.buildCompanyRequest();
 
     try {
-      const xmlResponse = await this._sendTallyPost(xmlRequest);
+      const xmlResponse = await this._sendTallyPost(xmlRequest, 'probe_company');
       const latencyMs = Date.now() - startTime;
       const companyInfo = this.parser.normalizeCompany(xmlResponse);
 
       return {
         available: true,
+        tallyRunning: true,
         latencyMs,
         companyName: companyInfo.name,
         version: companyInfo.tallyVersion,
@@ -93,12 +127,15 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
         message: `Connected to TallyPrime at ${this.baseUrl} ("${companyInfo.name}")`
       };
     } catch (err) {
+      const isConnectionIssue = err.code === 'TALLY_NOT_RUNNING' || err.message?.includes('TALLY_NOT_RUNNING');
       return {
         available: false,
+        tallyRunning: !isConnectionIssue,
         latencyMs: Date.now() - startTime,
         companyName: null,
         version: null,
         port: this.port,
+        errorCode: err.code || 'CONNECTION_FAILED',
         message: err.message
       };
     }
@@ -109,7 +146,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchCompany() {
     const xmlRequest = TdlBuilder.buildCompanyRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'company');
     return this.parser.normalizeCompany(xmlResponse);
   }
 
@@ -118,7 +155,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchCustomers(options = {}) {
     const xmlRequest = TdlBuilder.buildCustomerRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'customers');
     return this.parser.normalizeCustomers(xmlResponse);
   }
 
@@ -127,7 +164,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchVendors(options = {}) {
     const xmlRequest = TdlBuilder.buildVendorRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'vendors');
     return this.parser.normalizeVendors(xmlResponse);
   }
 
@@ -136,7 +173,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchGroups(options = {}) {
     const xmlRequest = TdlBuilder.buildGroupRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'groups');
     return this.parser.normalizeGroups(xmlResponse);
   }
 
@@ -145,7 +182,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchLedgers(options = {}) {
     const xmlRequest = TdlBuilder.buildLedgerRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'ledgers');
     return this.parser.normalizeLedgers(xmlResponse);
   }
 
@@ -161,7 +198,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchCostCentres(options = {}) {
     const xmlRequest = TdlBuilder.buildCostCentreRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'cost_centres');
     return this.parser.normalizeCostCentres(xmlResponse);
   }
 
@@ -170,7 +207,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchStockItems(options = {}) {
     const xmlRequest = TdlBuilder.buildStockItemRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'stock_items');
     return this.parser.normalizeStockItems(xmlResponse);
   }
 
@@ -186,7 +223,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchStockGroups(options = {}) {
     const xmlRequest = TdlBuilder.buildStockGroupRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'stock_groups');
     return this.parser.normalizeStockGroups(xmlResponse);
   }
 
@@ -195,7 +232,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchUnits(options = {}) {
     const xmlRequest = TdlBuilder.buildUnitRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'units');
     return this.parser.normalizeUnits(xmlResponse);
   }
 
@@ -204,7 +241,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchGodowns(options = {}) {
     const xmlRequest = TdlBuilder.buildGodownRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'godowns');
     return this.parser.normalizeGodowns(xmlResponse);
   }
 
@@ -213,7 +250,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchSalesOrders(options = {}) {
     const xmlRequest = TdlBuilder.buildSalesOrderRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'sales_orders');
     return this.parser.normalizeSalesOrders(xmlResponse);
   }
 
@@ -222,7 +259,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchPurchaseOrders(options = {}) {
     const xmlRequest = TdlBuilder.buildPurchaseOrderRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'purchase_orders');
     return this.parser.normalizePurchaseOrders(xmlResponse);
   }
 
@@ -231,7 +268,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchDeliveryNotes(options = {}) {
     const xmlRequest = TdlBuilder.buildDeliveryNoteRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'delivery_notes');
     return this.parser.normalizeDeliveryNotes(xmlResponse);
   }
 
@@ -240,7 +277,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchReceiptNotes(options = {}) {
     const xmlRequest = TdlBuilder.buildReceiptNoteRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'receipt_notes');
     return this.parser.normalizeReceiptNotes(xmlResponse);
   }
 
@@ -249,17 +286,33 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    */
   async fetchSalesRegister(options = {}) {
     const xmlRequest = TdlBuilder.buildSalesRegisterRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'sales_register');
     return this.parser.normalizeSalesVouchers(xmlResponse);
   }
 
   /**
-   * Fetches Trial Balance
+   * Fetches Trial Balance (Official Report Request TYPE=Data, ID=TrialBalance)
+   * Evaluates report formulas and falls back to collection if needed
    */
   async fetchTrialBalance(options = {}) {
     const xmlRequest = TdlBuilder.buildTrialBalanceRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest);
-    return this.parser.normalizeTrialBalance(xmlResponse);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'trial_balance');
+    let results = this.parser.normalizeTrialBalance(xmlResponse, options);
+
+    if (!results || results.length === 0) {
+      try {
+        const fallbackRequest = TdlBuilder.buildTrialBalanceCollectionRequest(options);
+        const fallbackResponse = await this._sendTallyPost(fallbackRequest, 'trial_balance_collection');
+        const fallbackResults = this.parser.normalizeTrialBalance(fallbackResponse, options);
+        if (fallbackResults && fallbackResults.length > 0) {
+          results = fallbackResults;
+        }
+      } catch (_) {
+        // Return results from primary request
+      }
+    }
+
+    return results;
   }
 
   /**

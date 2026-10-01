@@ -1,0 +1,28 @@
+{
+  "name": "@tallyconnect/sdk",
+  "version": "1.0.0",
+  "description": "Official Node.js SDK for Tally Connect — Connect SaaS applications to customer TallyPrime systems",
+  "main": "index.js",
+  "types": "tallyConnect.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./tallyConnect.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "keywords": [
+    "tally",
+    "tallyprime",
+    "accounting",
+    "saas",
+    "integration",
+    "erp",
+    "tally-connect"
+  ],
+  "author": "Tally Connect Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

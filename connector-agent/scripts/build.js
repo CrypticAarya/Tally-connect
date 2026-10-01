@@ -19,6 +19,9 @@ async function build() {
 
   // 1. Bundle into a single standalone CJS bundle using esbuild
   console.log('[1/3] Bundling with esbuild...');
+  const publicCloudUrl = process.env.PUBLIC_CLOUD_URL || process.env.BUILD_CLOUD_URL || 'https://ham-karen-basename-collaboration.trycloudflare.com';
+  console.log(`  Configured Public Cloud URL: ${publicCloudUrl}`);
+
   const entryFile = path.join(rootDir, 'src', 'index.js');
   const bundleFile = path.join(distDir, 'agent-bundle.cjs');
 
@@ -27,6 +30,7 @@ async function build() {
     `--platform=node ` +
     `--target=node18 ` +
     `--format=cjs ` +
+    `--define:process.env.PUBLIC_CLOUD_URL='"${publicCloudUrl}"' ` +
     `--outfile="${bundleFile}" ` +
     `--sourcemap=inline`;
 

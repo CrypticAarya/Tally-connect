@@ -1,0 +1,36 @@
+# ==============================================================================
+# Tally Connect — Local Development Database (Docker Compose)
+#
+# NOTE: This configuration is for LOCAL DEVELOPMENT ONLY.
+# Do NOT use this setup for commercial production deployments.
+#
+# Usage:
+#   docker compose up -d       # Start MySQL in background
+#   docker compose down        # Stop MySQL
+#   docker compose down -v     # Stop and wipe database volume
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: tally-connect-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: tally_connect
+    ports:
+      - "3306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - tally_connect_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tally_connect_mysql_data:
+    driver: local

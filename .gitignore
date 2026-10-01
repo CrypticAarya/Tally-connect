@@ -6,6 +6,8 @@ logs/*.log
 connector-agent/logs/*.log
 connector-agent/bin/
 scratch/
+debug/
+exports/
 .env
 .env.*
 *.env

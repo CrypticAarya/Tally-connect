@@ -18,7 +18,9 @@
     "test:integration": "node tests/integration/sync-engine.test.js && node tests/integration/customer-connection.test.js && node tests/integration/developer-portal.test.js",
     "test:agent": "node tests/agent/agent-lifecycle.test.js",
     "test:release": "node tests/release/production-readiness.test.js",
-    "test:real-tally": "node tests/real-tally/real-tally-extraction.test.js"
+    "test:real-tally": "node tests/real-tally/real-tally-extraction.test.js",
+    "test:saas-flow": "node tests/external-saas/saas-integration-flow.test.js",
+    "test:sdk": "node tests/external-saas/sdk-consumer.test.js"
   },
   "keywords": [
     "tally",
@@ -34,7 +36,6 @@
   },
   "dependencies": {
     "fast-csv": "^5.0.7",
-    "mysql2": "^3.24.4",
-    "pg": "^8.23.0"
+    "mysql2": "^3.24.4"
   }
 }

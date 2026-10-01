@@ -1,4 +1,4 @@
-import { TallyConnect } from './tallyConnect.js';
+import { TallyConnect, connectTally } from './tallyConnect.js';
 
-export { TallyConnect };
+export { TallyConnect, connectTally };
 export default TallyConnect;

@@ -19,5 +19,9 @@ This directory contains internal engineering specifications, deployment guides, 
 | [`PRODUCTION_DEPLOYMENT.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/PRODUCTION_DEPLOYMENT.md) | Cloud infrastructure provisioning runbook (EC2/GCP, Nginx, MySQL, Systemd). |
 | [`REMOVED_CODE.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/REMOVED_CODE.md) | Detailed audit log of duplicate/legacy prototype files retired to `legacy/`. |
 | [`WINDOWS_CUSTOMER_TESTER_GUIDE.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/WINDOWS_CUSTOMER_TESTER_GUIDE.md) | Operational guidelines for internal QA and customer validation testers. |
+| [`EXTERNAL_DEVELOPER_HANDOFF_AUDIT.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/EXTERNAL_DEVELOPER_HANDOFF_AUDIT.md) | Phase 14 external SaaS developer readiness and handoff audit. |
+| [`TEST_SUITE_INVENTORY.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/TEST_SUITE_INVENTORY.md) | Canonical inventory of test suites, coverage, and runner commands. |
+| [`TEST_SUITE_CLEANUP_REPORT.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/TEST_SUITE_CLEANUP_REPORT.md) | Phase 13 test restructuring and reorganization audit report. |
+| [`TEST_COVERAGE_COMPARISON.md`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/TEST_COVERAGE_COMPARISON.md) | Comparison of regression coverage before and after architectural cleanup. |
 | [`customer-pilot/`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/customer-pilot) | Customer pilot onboarding checklists, templates, and interview scripts. |
 | [`pilot-framework/`](file:///Users/eunoia/Desktop/Tally%20Connect/docs/internal/pilot-framework) | Customer validation pilot test scripts and reporting frameworks. |

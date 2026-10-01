@@ -1,6 +1,8 @@
+import { resolveCloudUrl } from './cloudConfig.js';
+
 export class CloudClient {
   constructor(options = {}) {
-    let rawUrl = options.cloudUrl ? options.cloudUrl.replace(/\/$/, '') : 'http://127.0.0.1:5001';
+    let rawUrl = resolveCloudUrl(options.cloudUrl);
     if (rawUrl.includes('//localhost')) {
       rawUrl = rawUrl.replace('//localhost', '//127.0.0.1');
     }
@@ -10,30 +12,31 @@ export class CloudClient {
     this.connectionId = options.connectionId;
     this.agentId = options.agentId;
     this.agentToken = options.agentToken;
-    this.timeoutMs = options.timeoutMs || 5000;
+    this.timeoutMs = options.timeoutMs || 10000;
   }
 
   /**
    * Health check against Cloud API
-   * @returns {Promise<{ success: boolean, status?: string, error?: string }>}
+   * @returns {Promise<{ success: boolean, status?: string, error?: string, cloudUrl?: string }>}
    */
   async checkHealth() {
     const url = `${this.cloudUrl}/api/health`;
     try {
+      const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(this.timeoutMs) : undefined;
       const response = await fetch(url, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(this.timeoutMs)
+        signal
       });
 
       if (!response.ok) {
-        return { success: false, error: `Cloud returned HTTP ${response.status}` };
+        return { success: false, error: `Cloud returned HTTP ${response.status}`, cloudUrl: this.cloudUrl };
       }
 
       const data = await response.json();
-      return { success: true, status: data.status, time: data.time };
+      return { success: true, status: data.status, time: data.time, cloudUrl: this.cloudUrl };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message, cloudUrl: this.cloudUrl };
     }
   }
 

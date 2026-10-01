@@ -1,153 +1,345 @@
 /**
- * Schemas Definition Module
+ * Schemas Definition Module for Tally Connect
  * 
- * Strict column orders and definitions matching the uploaded sample CSV templates:
- * - SampleCustomer.csv (36 columns)
- * - SampleChartAccounts.csv (17 columns)
- * - SampleSalesRegister.csv (32 columns)
- * - SampleTrialBalances.csv (9 columns)
+ * Defines clean, genuine CSV column schemas for all 15 Tally datasets.
+ * Only genuine Tally fields are included. No synthetic or fake columns.
  */
 
 export const DATASET_SCHEMAS = {
-  CUSTOMER: {
-    id: 'CUSTOMER',
-    displayName: 'Customer Master',
-    fileNamePrefix: 'Customer',
-    description: 'Customer master accounts with tax, banking, credit, and contact details',
+  // --- 1. LEDGERS ---
+  ledgers: {
+    id: 'ledgers',
+    displayName: 'Ledgers',
+    fileNamePrefix: 'ledgers',
     columns: [
-      'Customer Code',
-      'Customer Name',
-      'Customer Type',
-      'Account Status',
-      'Primary Contact Name',
-      'Primary Contact Email',
-      'Primary Contact Phone',
-      'Street Address',
-      'City',
-      'State/Province',
-      'Postal/ZIP Code',
+      'Ledger Name',
+      'Parent Group',
+      'Opening Balance',
+      'Closing Balance',
+      'GST Applicable',
+      'Cost Centres Enabled',
+      'Mailing Name',
+      'State',
+      'Pincode',
       'Country',
-      'GST Reg Type',
-      'Pan',
+      'GSTIN',
+      'PAN',
+      'Phone',
+      'Email',
+      'Description'
+    ]
+  },
+
+  // --- 2. GROUPS ---
+  groups: {
+    id: 'groups',
+    displayName: 'Groups',
+    fileNamePrefix: 'groups',
+    columns: [
+      'Group Name',
+      'Parent Group',
+      'Is Addable',
+      'Is Sub Ledger',
+      'Is Calculate'
+    ]
+  },
+
+  // --- 3. COST CENTERS ---
+  cost_centers: {
+    id: 'cost_centers',
+    displayName: 'Cost Centers',
+    fileNamePrefix: 'cost_centers',
+    columns: [
+      'Cost Center Name',
+      'Parent',
+      'Category'
+    ]
+  },
+
+  // --- 4. CUSTOMERS ---
+  customers: {
+    id: 'customers',
+    displayName: 'Customers',
+    fileNamePrefix: 'customers',
+    columns: [
+      'Customer Name',
+      'Parent Group',
+      'GSTIN',
+      'PAN',
+      'Contact Person',
+      'Email',
+      'Phone',
+      'Address',
+      'State',
+      'Pincode',
+      'Country',
       'Credit Days',
       'Credit Limit',
-      'Payment Terms',
-      'Currency',
-      'Branch ID/Name',
-      'Sales Representative',
-      'GST Number',
-      'GST State Code',
-      'GST State Name',
-      'MainDistributor',
-      'MainDealer',
-      'MainAgent',
-      'SubDistributor',
-      'SubDealer',
-      'SubAgent',
-      'AccPartyBankName',
-      'AccPartyBankIFSCCode',
-      'AccPartyBankActNo',
-      'AccStartDate',
-      'AccEndDate',
-      'Active',
-      'Remarks'
+      'Bank Name',
+      'Account Number',
+      'IFSC Code',
+      'Opening Balance',
+      'Closing Balance'
     ]
   },
 
-  CHART_OF_ACCOUNTS: {
-    id: 'CHART_OF_ACCOUNTS',
-    displayName: 'Chart of Accounts',
-    fileNamePrefix: 'ChartAccounts',
-    description: 'Hierarchical general ledger chart of accounts and grouping structure',
+  // --- 5. VENDORS ---
+  vendors: {
+    id: 'vendors',
+    displayName: 'Vendors',
+    fileNamePrefix: 'vendors',
     columns: [
-      'Account Code',
-      'GL Name',
-      'Ledger Description',
-      'Parent',
-      'Grouping',
-      'Grouping for Financial Summary',
-      'Branch',
-      'Cost Center',
-      'Cost Classification',
-      'Cost Behaviour Description',
-      'SV Variable %',
-      'Inter-branch',
-      'Related Party',
-      'GST Applicable',
-      'TDS Applicable',
-      'Active',
-      'Remarks'
-    ]
-  },
-
-  SALES_REGISTER: {
-    id: 'SALES_REGISTER',
-    displayName: 'Sales Register',
-    fileNamePrefix: 'SalesRegister',
-    description: 'Flattened line-item sales invoice transactions with tax breakdowns',
-    columns: [
-      'Code',
-      'Sales Date',
-      'Invoice No',
-      'Invoice Date',
-      'Customer Name/Code',
+      'Vendor Name',
+      'Parent Group',
       'GSTIN',
-      'Customer Type',
-      'Sales Type',
-      'Branch Name/Code',
-      'Cost Center Name/Code',
-      'Godown Name/Code',
-      'Item Description',
-      'HSN',
-      'Qty',
-      'Rate',
-      'Discount',
-      'Tax Value',
-      'CGST',
-      'CGST Amount',
-      'SGST',
-      'SGST Amount',
-      'IGST',
-      'IGST Amount',
-      'Other Charges (₹)',
-      'Total Invoice',
-      'Place of Supply (State)',
-      'Payment Terms',
-      'Due Date',
-      'Payment Status',
-      'Payment Date',
-      'Mode Of Payment',
-      'Remarks'
+      'PAN',
+      'Contact Person',
+      'Email',
+      'Phone',
+      'Address',
+      'State',
+      'Pincode',
+      'Country',
+      'Credit Days',
+      'Credit Limit',
+      'Bank Name',
+      'Account Number',
+      'IFSC Code',
+      'Opening Balance',
+      'Closing Balance'
     ]
   },
 
-  TRIAL_BALANCE: {
-    id: 'TRIAL_BALANCE',
-    displayName: 'Trial Balance',
-    fileNamePrefix: 'TrialBalances',
-    description: 'Periodic trial balance balances by ledger and branch',
+  // --- 6. STOCK ITEMS ---
+  stock_items: {
+    id: 'stock_items',
+    displayName: 'Stock Items',
+    fileNamePrefix: 'stock_items',
     columns: [
-      'Month/Year',
-      'Branch',
-      'Particulars',
-      'Name',
-      'Opening',
+      'Item Name',
+      'Stock Group',
+      'Unit of Measure',
+      'HSN Code',
+      'Opening Quantity',
+      'Opening Rate',
+      'Opening Value',
+      'Closing Quantity',
+      'Closing Rate',
+      'Closing Value',
+      'GST Applicable',
+      'GST Rate',
+      'Description'
+    ]
+  },
+
+  // --- 7. STOCK GROUPS ---
+  stock_groups: {
+    id: 'stock_groups',
+    displayName: 'Stock Groups',
+    fileNamePrefix: 'stock_groups',
+    columns: [
+      'Stock Group Name',
+      'Parent',
+      'Is Addable'
+    ]
+  },
+
+  // --- 8. UNITS ---
+  units: {
+    id: 'units',
+    displayName: 'Units',
+    fileNamePrefix: 'units',
+    columns: [
+      'Unit Name',
+      'Original Name',
+      'Decimal Places',
+      'GST Excluded'
+    ]
+  },
+
+  // --- 9. GODOWNS ---
+  godowns: {
+    id: 'godowns',
+    displayName: 'Godowns',
+    fileNamePrefix: 'godowns',
+    columns: [
+      'Godown Name',
+      'Parent',
+      'Address',
+      'Pincode'
+    ]
+  },
+
+  // --- 10. SALES ORDERS ---
+  sales_orders: {
+    id: 'sales_orders',
+    displayName: 'Sales Orders',
+    fileNamePrefix: 'sales_orders',
+    columns: [
+      'Order Number',
+      'Order Date',
+      'Due Date',
+      'Customer Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Order Total',
+      'Narration'
+    ]
+  },
+
+  // --- 11. PURCHASE ORDERS ---
+  purchase_orders: {
+    id: 'purchase_orders',
+    displayName: 'Purchase Orders',
+    fileNamePrefix: 'purchase_orders',
+    columns: [
+      'Order Number',
+      'Order Date',
+      'Due Date',
+      'Vendor Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Order Total',
+      'Narration'
+    ]
+  },
+
+  // --- 12. DELIVERY NOTES ---
+  delivery_notes: {
+    id: 'delivery_notes',
+    displayName: 'Delivery Notes',
+    fileNamePrefix: 'delivery_notes',
+    columns: [
+      'Note Number',
+      'Date',
+      'Customer Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Note Total',
+      'Narration'
+    ]
+  },
+
+  // --- 13. RECEIPT NOTES ---
+  receipt_notes: {
+    id: 'receipt_notes',
+    displayName: 'Receipt Notes',
+    fileNamePrefix: 'receipt_notes',
+    columns: [
+      'Note Number',
+      'Date',
+      'Vendor Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Note Total',
+      'Narration'
+    ]
+  },
+
+  // --- 14. TRIAL BALANCE ---
+  trial_balance: {
+    id: 'trial_balance',
+    displayName: 'Trial Balance',
+    fileNamePrefix: 'trial_balance',
+    columns: [
+      'Ledger Name',
+      'Group',
+      'Opening Debit',
+      'Opening Credit',
       'Debit',
       'Credit',
-      'Closing',
-      'Dr/Cr'
+      'Closing Debit',
+      'Closing Credit'
+    ]
+  },
+
+  // --- 15. SALES REGISTER ---
+  sales_register: {
+    id: 'sales_register',
+    displayName: 'Sales Register',
+    fileNamePrefix: 'sales_register',
+    columns: [
+      'Invoice Number',
+      'Invoice Date',
+      'Customer Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Total Invoice',
+      'Narration'
     ]
   }
 };
 
+// Aliases mapping for common alternative naming
+const ALIAS_MAP = {
+  customer: 'customers',
+  customers: 'customers',
+  vendor: 'vendors',
+  vendors: 'vendors',
+  ledger: 'ledgers',
+  ledgers: 'ledgers',
+  chart_of_accounts: 'ledgers',
+  group: 'groups',
+  groups: 'groups',
+  cost_centre: 'cost_centers',
+  cost_centres: 'cost_centers',
+  cost_center: 'cost_centers',
+  cost_centers: 'cost_centers',
+  inventory: 'stock_items',
+  stock_item: 'stock_items',
+  stock_items: 'stock_items',
+  stock_group: 'stock_groups',
+  stock_groups: 'stock_groups',
+  unit: 'units',
+  units: 'units',
+  godown: 'godowns',
+  godowns: 'godowns',
+  sales_order: 'sales_orders',
+  sales_orders: 'sales_orders',
+  purchase_order: 'purchase_orders',
+  purchase_orders: 'purchase_orders',
+  delivery_note: 'delivery_notes',
+  delivery_notes: 'delivery_notes',
+  receipt_note: 'receipt_notes',
+  receipt_notes: 'receipt_notes',
+  trial_balance: 'trial_balance',
+  sales_register: 'sales_register',
+  sales: 'sales_register'
+};
+
 /**
- * Normalizes input key to uppercase standard schema key
- * e.g. "sales_register" -> "SALES_REGISTER"
+ * Normalizes input key to canonical dataset key
+ * e.g. "CUSTOMER" -> "customers", "trial-balance" -> "trial_balance"
  */
 export function normalizeDatasetKey(key) {
   if (!key) return null;
-  const upper = key.toUpperCase().replace(/-/g, '_');
-  return DATASET_SCHEMAS[upper] ? upper : null;
+  const canonical = String(key).trim().toLowerCase().replace(/[-\s]/g, '_');
+  return ALIAS_MAP[canonical] || (DATASET_SCHEMAS[canonical] ? canonical : null);
 }
 
 /**
@@ -155,7 +347,7 @@ export function normalizeDatasetKey(key) {
  */
 export function getSchema(datasetKey) {
   const normalized = normalizeDatasetKey(datasetKey);
-  if (!normalized) {
+  if (!normalized || !DATASET_SCHEMAS[normalized]) {
     throw new Error(`Unsupported dataset type: "${datasetKey}". Supported types: ${Object.keys(DATASET_SCHEMAS).join(', ')}`);
   }
   return DATASET_SCHEMAS[normalized];

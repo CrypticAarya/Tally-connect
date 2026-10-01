@@ -7,10 +7,13 @@ import { TallyClient } from './tallyClient.js';
 import { windowsService } from './windowsService.js';
 import { logger } from './logger.js';
 import { ConnectorAgent } from './agent.js';
+import { resolveCloudUrl, getSystemErrorLogPath } from './cloudConfig.js';
 
 export class Installer {
   constructor(options = {}) {
-    this.targetDir = options.targetDir || process.cwd();
+    // Default directory is executable directory when packaged, or cwd
+    const defaultDir = (process.pkg && process.execPath) ? path.dirname(process.execPath) : process.cwd();
+    this.targetDir = options.targetDir || defaultDir;
     this.configPath = path.join(this.targetDir, 'config.json');
     this.logsDir = path.join(this.targetDir, 'logs');
     this.interactive = options.interactive ?? true;
@@ -29,7 +32,7 @@ export class Installer {
       output: process.stdout
     });
 
-    const displayPrompt = defaultValue ? `${query} [${defaultValue}]: ` : `${query}: `;
+    const displayPrompt = defaultValue ? `${query} [${defaultValue}]: ` : (query ? `${query}: ` : '');
 
     return new Promise(resolve => {
       rl.question(displayPrompt, answer => {
@@ -38,6 +41,70 @@ export class Installer {
         resolve(trimmed || defaultValue);
       });
     });
+  }
+
+  /**
+   * Logs technical error details to local and system error logs
+   * %APPDATA%\TallyConnect\logs\errors.log
+   */
+  _logTechnicalError(title, details) {
+    const timestamp = new Date().toISOString();
+    let entry = `[${timestamp}] [INSTALLER_ERROR] ${title}\n`;
+    if (details instanceof Error) {
+      entry += `${details.stack || details.message}\n`;
+    } else if (typeof details === 'object') {
+      entry += `${JSON.stringify(details, null, 2)}\n`;
+    } else {
+      entry += `${details}\n`;
+    }
+    entry += '---------------------------------------------------------------\n';
+
+    // 1. Write to target directory's logs
+    try {
+      if (!fs.existsSync(this.logsDir)) {
+        fs.mkdirSync(this.logsDir, { recursive: true });
+      }
+      fs.appendFileSync(path.join(this.logsDir, 'errors.log'), entry, 'utf-8');
+    } catch (_) {}
+
+    // 2. Write to system logs: %APPDATA%\TallyConnect\logs\errors.log
+    try {
+      const sysPath = getSystemErrorLogPath();
+      const sysDir = path.dirname(sysPath);
+      if (!fs.existsSync(sysDir)) {
+        fs.mkdirSync(sysDir, { recursive: true });
+      }
+      fs.appendFileSync(sysPath, entry, 'utf-8');
+    } catch (_) {}
+  }
+
+  /**
+   * Handles failure with customer-safe messaging:
+   * 1. Displays simple customer-friendly message (no stack traces, no internal URLs)
+   * 2. Logs technical details to %APPDATA%\TallyConnect\logs\errors.log
+   * 3. Keeps the console window open when interactive (press Enter to exit)
+   * 4. Returns { success: false, error } or throws if requested
+   */
+  async _fail(friendlyMessage, technicalDetails, options = {}) {
+    this._logTechnicalError(friendlyMessage, technicalDetails);
+
+    console.log(`\n✖ ${friendlyMessage}`);
+    const sysLogPath = getSystemErrorLogPath();
+    console.log(`\nTechnical details have been saved to:\n  ${sysLogPath}`);
+
+    if (this.interactive) {
+      console.log('\nPress Enter to exit...');
+      await this._prompt('');
+    }
+
+    if (options.throwOnError) {
+      throw new Error(friendlyMessage);
+    }
+
+    return {
+      success: false,
+      error: friendlyMessage
+    };
   }
 
   /**
@@ -71,7 +138,7 @@ export class Installer {
     // Step 2: Enter activation code
     // -------------------------------------------------------------
     let activationCode = installArgs.activationCode || installArgs.code;
-    let cloudUrl = installArgs.cloudUrl || process.env.AGENT_CLOUD_URL || process.env.CLOUD_URL || (process.env.API_DOMAIN ? `https://${process.env.API_DOMAIN}` : 'http://127.0.0.1:5001');
+    let cloudUrl = resolveCloudUrl(installArgs.cloudUrl, this.configPath);
     let tallyHost = installArgs.tallyHost || '127.0.0.1';
     let tallyPort = Number(installArgs.tallyPort || 9000);
 
@@ -80,9 +147,11 @@ export class Installer {
     }
 
     if (!activationCode) {
-      const err = 'Please provide your activation code to continue.';
-      logger.error('Installation aborted: No activation code provided.');
-      throw new Error(err);
+      const errMsg = 'Please provide your activation code to continue.';
+      return await this._fail(errMsg, {
+        step: 'activation_code_input',
+        error: 'No activation code provided'
+      }, { throwOnError: installArgs.throwOnError });
     }
 
     activationCode = activationCode.trim().toUpperCase();
@@ -96,9 +165,13 @@ export class Installer {
     const cloudClient = new CloudClient({ cloudUrl });
     const health = await cloudClient.checkHealth();
     if (!health.success) {
-      const errMsg = 'Unable to connect to the cloud service. Please check your internet connection and try again.';
-      logger.error(`Cloud check failed: ${health.error} (${cloudUrl})`);
-      throw new Error(errMsg);
+      const errMsg = "We couldn't connect to Tally Connect. Please check your internet connection and try again.";
+      return await this._fail(errMsg, {
+        step: 'cloud_health_check',
+        cloudUrl,
+        error: health.error,
+        timeoutMs: cloudClient.timeoutMs
+      }, { throwOnError: installArgs.throwOnError });
     }
     console.log('  ✔ Connected to cloud service');
     logger.info(`Cloud connection verified at ${cloudUrl}`);
@@ -143,8 +216,12 @@ export class Installer {
       } else if (activationRes.error && activationRes.error.toLowerCase().includes('already')) {
         friendlyError = 'This activation code has already been used. Please generate a new code if needed.';
       }
-      logger.error(`Activation failed: ${activationRes.error}`);
-      throw new Error(friendlyError);
+      return await this._fail(friendlyError, {
+        step: 'agent_activation',
+        activationCode,
+        cloudUrl,
+        error: activationRes.error
+      }, { throwOnError: installArgs.throwOnError });
     }
 
     console.log('  ✔ Activation code verified');
@@ -169,16 +246,30 @@ export class Installer {
       activatedAt: new Date().toISOString()
     };
 
-    fs.writeFileSync(this.configPath, JSON.stringify(configData, null, 2), 'utf-8');
-    console.log('  ✔ Settings saved securely');
-    logger.info(`Credentials saved to ${this.configPath}`);
+    try {
+      fs.writeFileSync(this.configPath, JSON.stringify(configData, null, 2), 'utf-8');
+      console.log('  ✔ Settings saved securely');
+      logger.info(`Credentials saved to ${this.configPath}`);
+    } catch (saveErr) {
+      return await this._fail('Unable to save settings. Please ensure you have permission to write to this directory.', {
+        step: 'save_config',
+        configPath: this.configPath,
+        error: saveErr.message
+      }, { throwOnError: installArgs.throwOnError });
+    }
 
     // -------------------------------------------------------------
     // Step 7: Configure auto-start
     // -------------------------------------------------------------
     console.log('\n[5/5] Setting up automatic startup...');
     const exePath = process.execPath || process.argv[0];
-    const autoStartRes = windowsService.enableAutoStart(exePath);
+    let targetExe = exePath;
+    const dir = path.dirname(exePath);
+    const agentExe = path.join(dir, 'TallyConnectAgent.exe');
+    if (path.basename(exePath).includes('Setup') && fs.existsSync(agentExe)) {
+      targetExe = agentExe;
+    }
+    const autoStartRes = windowsService.enableAutoStart(targetExe);
     console.log('  ✔ Automatic startup enabled (starts with Windows)');
     logger.info(`Windows auto-start configured via ${autoStartRes.method}`);
 
@@ -215,8 +306,11 @@ if (process.argv[1] && process.argv[1].endsWith('installer.js')) {
   }
 
   const installer = new Installer({ interactive: args.interactive !== false });
-  installer.run(args).catch(err => {
-    console.error('\n✖ Setup could not be completed:', err.message);
+  installer.run(args).then(res => {
+    if (!res || res.success === false) {
+      process.exit(1);
+    }
+  }).catch(() => {
     process.exit(1);
   });
 }
