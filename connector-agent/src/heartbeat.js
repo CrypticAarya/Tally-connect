@@ -25,12 +25,19 @@ export class HeartbeatService {
 
     const payload = {
       connectorId: this.config.connectorId,
+      connectionId: this.config.connectionId,
+      agentId: this.config.agentId,
       machineName: this.machineName,
       tallyStatus: tallyInfo.online ? 'ONLINE' : 'OFFLINE',
-      activeCompany: tallyInfo.activeCompany || 'None',
+      activeCompany: tallyInfo.activeCompany || this.config.companyName || 'None',
       port: tallyInfo.port || 9000,
+      agentVersion: this.config.agentVersion || '1.0.0-beta',
       timestamp: new Date().toISOString()
     };
+
+    if (!tallyInfo.online) {
+      logger.warn(`Tally connection issue: TallyPrime not responding on port ${payload.port} (${tallyInfo.error || 'Connection refused'})`);
+    }
 
     this.lastPayload = payload;
 
@@ -42,7 +49,7 @@ export class HeartbeatService {
         `Tally: ${payload.tallyStatus} | Company: "${payload.activeCompany}" | Latency: ${tallyInfo.latencyMs}ms`
       );
     } else {
-      logger.warn(`[Heartbeat #${this.pulseCount}] Delivery failed: ${result.error}`);
+      logger.warn(`Heartbeat failure: ${result.error}`);
     }
 
     this.onPulse({ payload, result, tallyInfo });
@@ -58,17 +65,17 @@ export class HeartbeatService {
 
     // Send immediate first pulse
     this.pulse().catch(err => {
-      console.error('[Heartbeat] Initial pulse error:', err.message);
+      logger.warn(`[Heartbeat] Initial pulse warning: ${err.message}`);
     });
 
     // Schedule recurring pulses
     this.timer = setInterval(() => {
       this.pulse().catch(err => {
-        console.error('[Heartbeat] Recurring pulse error:', err.message);
+        logger.warn(`[Heartbeat] Recurring pulse warning: ${err.message}`);
       });
     }, this.intervalSeconds * 1000);
 
-    console.log(`[Heartbeat] Heartbeat service started (Interval: every ${this.intervalSeconds}s)`);
+    logger.info(`[Heartbeat] Heartbeat service started (Interval: every ${this.intervalSeconds}s)`);
   }
 
   /**
@@ -80,6 +87,6 @@ export class HeartbeatService {
       this.timer = null;
     }
     this.isRunning = false;
-    console.log('[Heartbeat] Heartbeat service stopped');
+    logger.info('[Heartbeat] Heartbeat service stopped');
   }
 }

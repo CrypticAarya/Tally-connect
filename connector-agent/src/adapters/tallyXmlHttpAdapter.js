@@ -1,13 +1,6 @@
 import { TallyAdapter } from './tallyAdapter.js';
 import { TdlBuilder } from './tdlBuilder.js';
 import { TallyXmlParser } from './xmlParser.js';
-import {
-  SAMPLE_COMPANY_XML,
-  SAMPLE_CUSTOMER_XML,
-  SAMPLE_CHART_OF_ACCOUNTS_XML,
-  SAMPLE_SALES_REGISTER_XML,
-  SAMPLE_TRIAL_BALANCE_XML
-} from './xmlFixtures.js';
 
 export class TallyXmlHttpAdapter extends TallyAdapter {
   /**
@@ -15,26 +8,24 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * @param {string} [options.host] - Tally host (defaults to 127.0.0.1)
    * @param {number} [options.port] - Tally HTTP port (defaults to 9000)
    * @param {number} [options.timeoutMs] - Request timeout (default: 6000ms)
-   * @param {boolean} [options.fixtureFallback] - If true, falls back to XML fixtures when Tally is offline
    */
   constructor(options = {}) {
     super();
     this.host = options.host || '127.0.0.1';
     this.port = options.port || 9000;
     this.timeoutMs = options.timeoutMs ?? 6000;
-    this.fixtureFallback = options.fixtureFallback ?? false;
 
     this.parser = new TallyXmlParser();
     this.baseUrl = `http://${this.host}:${this.port}`;
+    this.fixtureFallback = false;
   }
 
   /**
    * Core HTTP POST dispatcher to TallyPrime port 9000
    * @param {string} xmlPayload - TDL envelope
-   * @param {string} [fixtureFallbackKey] - Key for XML fixture fallback if enabled
    * @returns {Promise<string>} Raw XML response text
    */
-  async _sendTallyPost(xmlPayload, fixtureFallbackKey = null) {
+  async _sendTallyPost(xmlPayload) {
     try {
       const response = await fetch(this.baseUrl, {
         method: 'POST',
@@ -60,12 +51,8 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
         err.message?.includes('ETIMEDOUT');
 
       if (isConnectionIssue) {
-        if (this.fixtureFallback && fixtureFallbackKey) {
-          return this._getFixture(fixtureFallbackKey);
-        }
-
         const helpfulMessage =
-          `Unable to connect to TallyPrime at ${this.baseUrl}. ` +
+          `TALLY_NOT_RUNNING: Unable to connect to TallyPrime at ${this.baseUrl}. ` +
           `Please verify that:\n` +
           `1. TallyPrime is open and running on this machine.\n` +
           `2. The TallyPrime HTTP Server is enabled:\n` +
@@ -74,32 +61,13 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
           `   - Ensure port is set to ${this.port}.`;
 
         const connectionError = new Error(helpfulMessage);
-        connectionError.code = 'TALLY_UNREACHABLE';
+        connectionError.code = 'TALLY_NOT_RUNNING';
+        connectionError.statusCode = 503;
         connectionError.originalError = err;
         throw connectionError;
       }
 
       throw err;
-    }
-  }
-
-  /**
-   * Returns sample XML fixture for offline testing
-   */
-  _getFixture(key) {
-    switch (key) {
-      case 'COMPANY':
-        return SAMPLE_COMPANY_XML;
-      case 'CUSTOMER':
-        return SAMPLE_CUSTOMER_XML;
-      case 'CHART_OF_ACCOUNTS':
-        return SAMPLE_CHART_OF_ACCOUNTS_XML;
-      case 'SALES_REGISTER':
-        return SAMPLE_SALES_REGISTER_XML;
-      case 'TRIAL_BALANCE':
-        return SAMPLE_TRIAL_BALANCE_XML;
-      default:
-        throw new Error(`Unknown fixture key: ${key}`);
     }
   }
 
@@ -111,7 +79,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
     const xmlRequest = TdlBuilder.buildCompanyRequest();
 
     try {
-      const xmlResponse = await this._sendTallyPost(xmlRequest, 'COMPANY');
+      const xmlResponse = await this._sendTallyPost(xmlRequest);
       const latencyMs = Date.now() - startTime;
       const companyInfo = this.parser.normalizeCompany(xmlResponse);
 
@@ -137,38 +105,160 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
   }
 
   /**
+   * Fetches active company info
+   */
+  async fetchCompany() {
+    const xmlRequest = TdlBuilder.buildCompanyRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeCompany(xmlResponse);
+  }
+
+  /**
    * Fetches Customer Master ledgers from TallyPrime
    */
   async fetchCustomers(options = {}) {
     const xmlRequest = TdlBuilder.buildCustomerRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest, 'CUSTOMER');
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
     return this.parser.normalizeCustomers(xmlResponse);
   }
 
   /**
-   * Fetches Chart of Accounts ledgers from TallyPrime
+   * Fetches Vendor Master ledgers from TallyPrime
    */
-  async fetchChartOfAccounts(options = {}) {
-    const xmlRequest = TdlBuilder.buildChartOfAccountsRequest();
-    const xmlResponse = await this._sendTallyPost(xmlRequest, 'CHART_OF_ACCOUNTS');
-    return this.parser.normalizeChartOfAccounts(xmlResponse);
+  async fetchVendors(options = {}) {
+    const xmlRequest = TdlBuilder.buildVendorRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeVendors(xmlResponse);
   }
 
   /**
-   * Fetches Sales Register vouchers from TallyPrime with date filters
+   * Fetches all Groups
+   */
+  async fetchGroups(options = {}) {
+    const xmlRequest = TdlBuilder.buildGroupRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeGroups(xmlResponse);
+  }
+
+  /**
+   * Fetches all Ledgers
+   */
+  async fetchLedgers(options = {}) {
+    const xmlRequest = TdlBuilder.buildLedgerRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeLedgers(xmlResponse);
+  }
+
+  /**
+   * Fetches Chart of Accounts
+   */
+  async fetchChartOfAccounts(options = {}) {
+    return this.fetchLedgers(options);
+  }
+
+  /**
+   * Fetches Cost Centres
+   */
+  async fetchCostCentres(options = {}) {
+    const xmlRequest = TdlBuilder.buildCostCentreRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeCostCentres(xmlResponse);
+  }
+
+  /**
+   * Fetches Stock Items (Inventory)
+   */
+  async fetchStockItems(options = {}) {
+    const xmlRequest = TdlBuilder.buildStockItemRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeStockItems(xmlResponse);
+  }
+
+  /**
+   * Alias for fetchStockItems
+   */
+  async fetchInventory(options = {}) {
+    return this.fetchStockItems(options);
+  }
+
+  /**
+   * Fetches Stock Groups
+   */
+  async fetchStockGroups(options = {}) {
+    const xmlRequest = TdlBuilder.buildStockGroupRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeStockGroups(xmlResponse);
+  }
+
+  /**
+   * Fetches Units of Measurement
+   */
+  async fetchUnits(options = {}) {
+    const xmlRequest = TdlBuilder.buildUnitRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeUnits(xmlResponse);
+  }
+
+  /**
+   * Fetches Godowns (Locations)
+   */
+  async fetchGodowns(options = {}) {
+    const xmlRequest = TdlBuilder.buildGodownRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeGodowns(xmlResponse);
+  }
+
+  /**
+   * Fetches Sales Orders
+   */
+  async fetchSalesOrders(options = {}) {
+    const xmlRequest = TdlBuilder.buildSalesOrderRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeSalesOrders(xmlResponse);
+  }
+
+  /**
+   * Fetches Purchase Orders
+   */
+  async fetchPurchaseOrders(options = {}) {
+    const xmlRequest = TdlBuilder.buildPurchaseOrderRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizePurchaseOrders(xmlResponse);
+  }
+
+  /**
+   * Fetches Delivery Notes
+   */
+  async fetchDeliveryNotes(options = {}) {
+    const xmlRequest = TdlBuilder.buildDeliveryNoteRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeDeliveryNotes(xmlResponse);
+  }
+
+  /**
+   * Fetches Receipt Notes
+   */
+  async fetchReceiptNotes(options = {}) {
+    const xmlRequest = TdlBuilder.buildReceiptNoteRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
+    return this.parser.normalizeReceiptNotes(xmlResponse);
+  }
+
+  /**
+   * Fetches Sales Register vouchers
    */
   async fetchSalesRegister(options = {}) {
     const xmlRequest = TdlBuilder.buildSalesRegisterRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest, 'SALES_REGISTER');
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
     return this.parser.normalizeSalesVouchers(xmlResponse);
   }
 
   /**
-   * Fetches Trial Balance balances from TallyPrime
+   * Fetches Trial Balance
    */
   async fetchTrialBalance(options = {}) {
     const xmlRequest = TdlBuilder.buildTrialBalanceRequest(options);
-    const xmlResponse = await this._sendTallyPost(xmlRequest, 'TRIAL_BALANCE');
+    const xmlResponse = await this._sendTallyPost(xmlRequest);
     return this.parser.normalizeTrialBalance(xmlResponse);
   }
 
@@ -181,7 +271,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
       type: 'xml_http',
       version: '1.0.0-beta',
       target: this.baseUrl,
-      description: 'Real TallyPrime XML/TDL connector communicating over HTTP port 9000'
+      description: 'Production TallyPrime XML/TDL connector communicating over HTTP port 9000'
     };
   }
 }

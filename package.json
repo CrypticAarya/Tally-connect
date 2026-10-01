@@ -9,7 +9,16 @@
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "start:server": "npm --prefix server start",
-    "build:client": "npm --prefix client run build"
+    "build:client": "npm --prefix client run build",
+    "test": "node tests/architecture/refactor-regression.test.js",
+    "test:all": "node tests/architecture/refactor-regression.test.js && node tests/security/security-hardening.test.js && node tests/integration/sync-engine.test.js && node tests/integration/customer-connection.test.js && node tests/integration/developer-portal.test.js && node tests/external-saas/external-saas.test.js && node tests/release/production-readiness.test.js",
+    "test:architecture": "node tests/architecture/refactor-regression.test.js",
+    "test:saas": "node tests/external-saas/external-saas.test.js",
+    "test:security": "node tests/security/security-hardening.test.js",
+    "test:integration": "node tests/integration/sync-engine.test.js && node tests/integration/customer-connection.test.js && node tests/integration/developer-portal.test.js",
+    "test:agent": "node tests/agent/agent-lifecycle.test.js",
+    "test:release": "node tests/release/production-readiness.test.js",
+    "test:real-tally": "node tests/real-tally/real-tally-extraction.test.js"
   },
   "keywords": [
     "tally",
@@ -25,6 +34,7 @@
   },
   "dependencies": {
     "fast-csv": "^5.0.7",
+    "mysql2": "^3.24.4",
     "pg": "^8.23.0"
   }
 }

@@ -1,0 +1,12 @@
+{
+  "fileKey": "CUSTOMER_first_export.csv",
+  "filename": "CUSTOMER_first_export.csv",
+  "sizeBytes": 2445,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:24:22.011Z",
+  "metadata": {
+    "dataset": "CUSTOMER",
+    "rowCount": 50,
+    "tenantId": "ten_8437af9466a6"
+  }
+}

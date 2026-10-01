@@ -38,7 +38,7 @@ export const ENVIRONMENTS = {
       idleTimeoutMillis: 30000
     },
     connector: {
-      mode: process.env.CONNECTOR_MODE || 'mock',
+      mode: process.env.CONNECTOR_MODE || 'xml_http',
       defaultHeartbeatInterval: 30,
       offlineTimeoutSeconds: 90,
       tallyHost: process.env.TALLY_HOST || '127.0.0.1',

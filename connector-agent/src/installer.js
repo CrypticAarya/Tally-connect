@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import readline from 'readline';
-import { fileURLToPath } from 'url';
 import { CloudClient } from './cloudClient.js';
 import { TallyClient } from './tallyClient.js';
 import { windowsService } from './windowsService.js';
@@ -15,6 +14,10 @@ export class Installer {
     this.configPath = path.join(this.targetDir, 'config.json');
     this.logsDir = path.join(this.targetDir, 'logs');
     this.interactive = options.interactive ?? true;
+
+    // Ensure logger uses this target directory's logs folder and keep console clean
+    logger.setLogsDir(this.logsDir);
+    logger.consoleOutput = false;
   }
 
   /**
@@ -38,121 +41,160 @@ export class Installer {
   }
 
   /**
-   * Executes the 6-step installation flow
+   * Executes the customer-facing simplified installation flow:
+   * 1. Welcome
+   * 2. Enter activation code (TC-XXXX)
+   * 3. Check cloud connection
+   * 4. Check TallyPrime availability
+   * 5. Activate agent
+   * 6. Save local credentials
+   * 7. Configure auto-start
+   * 8. Complete ("Connected Successfully.")
    */
   async run(installArgs = {}) {
+    // -------------------------------------------------------------
+    // Step 1: Welcome
+    // -------------------------------------------------------------
     console.log('\n===============================================================');
-    console.log('📦 Tally Connect Agent — Production Installation Wizard');
-    console.log('===============================================================\n');
+    console.log('📦 Tally Connect Setup');
+    console.log('===============================================================');
+    console.log('Welcome! This setup will link your TallyPrime in a few moments.\n');
 
-    // -------------------------------------------------------------
-    // Step 1: Install application / directory verification
-    // -------------------------------------------------------------
-    console.log('[Step 1/6] Preparing installation environment...');
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
     }
-    console.log(`  ✔ Installation Directory: ${this.targetDir}`);
-    console.log(`  ✔ Logs Directory: ${this.logsDir}`);
+
+    logger.info('Setup wizard initiated.');
+    logger.info(`Target installation directory: ${this.targetDir}`);
 
     // -------------------------------------------------------------
-    // Step 2 & 3: Collect credentials & endpoints
+    // Step 2: Enter activation code
     // -------------------------------------------------------------
-    console.log('\n[Step 2/6] Configuring customer credentials...');
-    let cloudUrl = installArgs.cloudUrl;
-    let connectorId = installArgs.connectorId;
-    let secret = installArgs.secret;
+    let activationCode = installArgs.activationCode || installArgs.code;
+    let cloudUrl = installArgs.cloudUrl || process.env.AGENT_CLOUD_URL || process.env.CLOUD_URL || (process.env.API_DOMAIN ? `https://${process.env.API_DOMAIN}` : 'http://127.0.0.1:5001');
     let tallyHost = installArgs.tallyHost || '127.0.0.1';
-    let tallyPort = installArgs.tallyPort || 9000;
+    let tallyPort = Number(installArgs.tallyPort || 9000);
 
-    if (this.interactive && (!connectorId || !secret)) {
-      if (!cloudUrl) {
-        cloudUrl = await this._prompt('Enter Tally Connect Cloud URL', 'http://localhost:5001');
-      }
-      if (!connectorId) {
-        connectorId = await this._prompt('Enter Connector ID (e.g. conn_acme_mumbai_01)');
-      }
-      if (!secret) {
-        secret = await this._prompt('Enter Secret Token (tok_beta_...)');
-      }
+    if (this.interactive && !activationCode) {
+      activationCode = await this._prompt('Enter the activation code shown on your screen (e.g. TC-4829)');
     }
 
-    cloudUrl = cloudUrl || 'http://localhost:5001';
-
-    if (!connectorId || !secret) {
-      throw new Error('Installation aborted: "connectorId" and "secret" token are required.');
+    if (!activationCode) {
+      const err = 'Please provide your activation code to continue.';
+      logger.error('Installation aborted: No activation code provided.');
+      throw new Error(err);
     }
 
-    console.log(`  ✔ Connector ID: ${connectorId}`);
-    console.log(`  ✔ Cloud Target: ${cloudUrl}`);
+    activationCode = activationCode.trim().toUpperCase();
+    console.log(`\nActivation Code: ${activationCode}`);
+    logger.info(`Activation code entered: ${activationCode}`);
 
     // -------------------------------------------------------------
-    // Step 4: Pre-flight check - Validate Cloud connection & token
+    // Step 3: Check cloud connection
     // -------------------------------------------------------------
-    console.log('\n[Step 3/6] Validating credentials with Tally Connect Cloud...');
-    const machineName = os.hostname();
-    const cloudClient = new CloudClient({ cloudUrl, connectorId, secret });
-
-    const cloudRes = await cloudClient.register(machineName);
-    if (!cloudRes.success) {
-      const errorMsg = `Cloud validation failed: ${cloudRes.error}`;
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
+    console.log('\n[1/5] Connecting to cloud service...');
+    const cloudClient = new CloudClient({ cloudUrl });
+    const health = await cloudClient.checkHealth();
+    if (!health.success) {
+      const errMsg = 'Unable to connect to the cloud service. Please check your internet connection and try again.';
+      logger.error(`Cloud check failed: ${health.error} (${cloudUrl})`);
+      throw new Error(errMsg);
     }
-
-    const tenantInfo = cloudRes.data;
-    console.log(`  ✔ Successfully authenticated with Cloud!`);
-    console.log(`  ✔ Linked Tenant: "${tenantInfo.companyName || 'Verified'}" (ID: ${tenantInfo.tenantId || 'ten_active'})`);
+    console.log('  ✔ Connected to cloud service');
+    logger.info(`Cloud connection verified at ${cloudUrl}`);
 
     // -------------------------------------------------------------
-    // Step 5: Pre-flight check - Check local TallyPrime
+    // Step 4: Check TallyPrime availability
     // -------------------------------------------------------------
-    console.log('\n[Step 4/6] Checking local TallyPrime availability...');
-    const tallyClient = new TallyClient({ host: tallyHost, port: tallyPort, simulateIfOffline: true });
+    console.log('\n[2/5] Checking TallyPrime...');
+    const tallyClient = new TallyClient({
+      host: tallyHost,
+      port: tallyPort
+    });
     const tallyStatus = await tallyClient.checkStatus();
 
     if (tallyStatus.online) {
-      console.log(`  ✔ TallyPrime detected on port ${tallyPort} (${tallyStatus.latencyMs}ms)`);
-      console.log(`  ✔ Active Company: "${tallyStatus.activeCompany}"`);
+      console.log('  ✔ TallyPrime detected');
+      if (tallyStatus.activeCompany) {
+        console.log(`  ✔ Active Company: "${tallyStatus.activeCompany}"`);
+      }
+      logger.info(`TallyPrime detected online on port ${tallyPort}, active company: "${tallyStatus.activeCompany || 'Default'}"`);
     } else {
-      console.warn(`  ⚠ Notice: TallyPrime not yet running on port ${tallyPort}.`);
-      console.warn(`    The agent will automatically detect TallyPrime once opened.`);
+      console.log('  ℹ Note: TallyPrime is not open right now.');
+      console.log('    Setup will finish normally, and Tally Connect will link automatically when TallyPrime is opened.');
+      logger.warn(`TallyPrime not detected on port ${tallyPort}. Agent will auto-detect when opened.`);
     }
 
     // -------------------------------------------------------------
-    // Step 6: Write configuration file
+    // Step 5: Activate agent
     // -------------------------------------------------------------
-    console.log('\n[Step 5/6] Writing production configuration file...');
+    console.log('\n[3/5] Verifying activation code...');
+    const machineName = installArgs.machineName || os.hostname();
+    const activationRes = await cloudClient.activateWithCode(
+      activationCode,
+      machineName,
+      tallyStatus.online ? tallyStatus.activeCompany : null
+    );
+
+    if (!activationRes.success) {
+      let friendlyError = 'The activation code could not be verified. Please check the code and try again.';
+      if (activationRes.error && activationRes.error.toLowerCase().includes('expired')) {
+        friendlyError = 'This activation code has expired. Please generate a new code from your dashboard.';
+      } else if (activationRes.error && activationRes.error.toLowerCase().includes('already')) {
+        friendlyError = 'This activation code has already been used. Please generate a new code if needed.';
+      }
+      logger.error(`Activation failed: ${activationRes.error}`);
+      throw new Error(friendlyError);
+    }
+
+    console.log('  ✔ Activation code verified');
+    console.log(`  ✔ Connected Company: "${activationRes.companyName}"`);
+    logger.info(`Agent activated successfully: connection_id=${activationRes.connectionId}, agent_id=${activationRes.agentId}, company="${activationRes.companyName}"`);
+
+    // -------------------------------------------------------------
+    // Step 6: Save local credentials
+    // -------------------------------------------------------------
+    console.log('\n[4/5] Saving secure settings...');
     const configData = {
       cloudUrl,
-      connectorId,
-      secret,
+      connectionId: activationRes.connectionId,
+      agentId: activationRes.agentId,
+      agentToken: activationRes.agentToken,
+      companyName: activationRes.companyName,
+      status: 'ACTIVE',
+      machineName,
       tallyHost,
-      tallyPort: Number(tallyPort),
+      tallyPort,
       heartbeatIntervalSeconds: 30,
-      pollIntervalSeconds: 10,
-      installedAt: new Date().toISOString(),
-      machineName
+      activatedAt: new Date().toISOString()
     };
 
     fs.writeFileSync(this.configPath, JSON.stringify(configData, null, 2), 'utf-8');
-    console.log(`  ✔ Saved config to: ${this.configPath}`);
+    console.log('  ✔ Settings saved securely');
+    logger.info(`Credentials saved to ${this.configPath}`);
 
     // -------------------------------------------------------------
-    // Step 7: Configure Windows Auto-Start
+    // Step 7: Configure auto-start
     // -------------------------------------------------------------
-    console.log('\n[Step 6/6] Configuring automatic background start...');
-    const exePath = process.argv[0];
+    console.log('\n[5/5] Setting up automatic startup...');
+    const exePath = process.execPath || process.argv[0];
     const autoStartRes = windowsService.enableAutoStart(exePath);
-    console.log(`  ✔ Background auto-start registered (${autoStartRes.method})`);
+    console.log('  ✔ Automatic startup enabled (starts with Windows)');
+    logger.info(`Windows auto-start configured via ${autoStartRes.method}`);
 
+    // -------------------------------------------------------------
+    // Step 8: Complete
+    // -------------------------------------------------------------
     console.log('\n===============================================================');
-    console.log('🎉 Tally Connect Agent successfully installed and ready!');
+    console.log('🎉 Connected Successfully!');
+    console.log('Tally Connect is now linked to your company.');
+    console.log('Everything is set up and running quietly in the background.');
+    console.log('You can now return to your browser.');
     console.log('===============================================================\n');
 
-    // Optionally launch agent
+    logger.info('Setup wizard completed successfully. Agent running.');
+
     if (installArgs.startAgent !== false) {
-      console.log('Starting background agent...\n');
       const agent = new ConnectorAgent(this.configPath);
       await agent.start();
       return { success: true, agent, config: configData };
@@ -166,15 +208,15 @@ export class Installer {
 if (process.argv[1] && process.argv[1].endsWith('installer.js')) {
   const args = {};
   for (let i = 2; i < process.argv.length; i++) {
-    if (process.argv[i] === '--connector-id') args.connectorId = process.argv[++i];
-    if (process.argv[i] === '--secret') args.secret = process.argv[++i];
+    if (process.argv[i] === '--code' || process.argv[i] === '-c') args.activationCode = process.argv[++i];
     if (process.argv[i] === '--cloud-url') args.cloudUrl = process.argv[++i];
+    if (process.argv[i] === '--tally-port') args.tallyPort = process.argv[++i];
     if (process.argv[i] === '--non-interactive') args.interactive = false;
   }
 
   const installer = new Installer({ interactive: args.interactive !== false });
   installer.run(args).catch(err => {
-    console.error('\n✖ Installation failed:', err.message);
+    console.error('\n✖ Setup could not be completed:', err.message);
     process.exit(1);
   });
 }

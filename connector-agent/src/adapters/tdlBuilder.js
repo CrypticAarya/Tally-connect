@@ -2,6 +2,10 @@
  * TDL (Tally Definition Language) and XML Request Builder
  * 
  * Constructs standard TDL envelope requests for TallyPrime's HTTP server (port 9000).
+ * Supports:
+ * - Master Data: Groups, Ledgers, Cost Centres, Stock Items, Stock Groups, Units, Godowns, Customers, Vendors
+ * - Transactions: Sales Orders, Purchase Orders, Delivery Notes, Receipt Notes, Sales Register, Trial Balance
+ * 
  * Compatible with Tally.ERP 9 and TallyPrime 1.0 – 4.x.
  */
 
@@ -77,12 +81,115 @@ export class TdlBuilder {
               GUID, NAME, PARENT, MAILINGNAME, PINCODE, STATENAME,
               COUNTRYNAME, ADDRESS, PARTYGSTIN, PANNUMBER,
               BILLCREDITPERIOD, CREDITLIMIT, LEDGERPHONE, EMAIL,
-              LEDGERCONTACT, BANKDETAILS.*
+              LEDGERCONTACT, BANKDETAILS.*, OPENINGBALANCE, CLOSINGBALANCE
             </FETCH>
           </COLLECTION>
           <SYSTEM TYPE="Formulae" NAME="IsSundryDebtor">
             $$IsBelongsTo:$$GroupSundryDebtors:$Parent
           </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Vendor Master ledgers under Sundry Creditors
+   */
+  static buildVendorRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>VendorMasterCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="VendorMasterCollection">
+            <TYPE>Ledger</TYPE>
+            <FILTER>IsSundryCreditor</FILTER>
+            <FETCH>
+              GUID, NAME, PARENT, MAILINGNAME, PINCODE, STATENAME,
+              COUNTRYNAME, ADDRESS, PARTYGSTIN, PANNUMBER,
+              BILLCREDITPERIOD, CREDITLIMIT, LEDGERPHONE, EMAIL,
+              LEDGERCONTACT, BANKDETAILS.*, OPENINGBALANCE, CLOSINGBALANCE
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsSundryCreditor">
+            $$IsBelongsTo:$$GroupSundryCreditors:$Parent
+          </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract all Groups
+   */
+  static buildGroupRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>GroupMasterCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="GroupMasterCollection">
+            <TYPE>Group</TYPE>
+            <FETCH>GUID, NAME, PARENT, BASICGROUPISCALCULATE, ISADDABLE, ISSUBLEDGER</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract all Ledgers
+   */
+  static buildLedgerRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>AllLedgersCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="AllLedgersCollection">
+            <TYPE>Ledger</TYPE>
+            <FETCH>
+              GUID, NAME, PARENT, DESCRIPTION, OPENINGBALANCE, CLOSINGBALANCE,
+              GSTAPPLICABLE, ISCOSTCENTRESON, MAILINGNAME, PINCODE, STATENAME,
+              COUNTRYNAME, PARTYGSTIN, PANNUMBER, LEDGERPHONE, EMAIL, NARRATION
+            </FETCH>
+          </COLLECTION>
         </TDLMESSAGE>
       </TDL>
     </DESC>
@@ -112,11 +219,337 @@ export class TdlBuilder {
           <COLLECTION NAME="ChartOfAccountsCollection">
             <TYPE>Ledger</TYPE>
             <FETCH>
-              GUID, NAME, PARENT, DESCRIPTION, AFFECTSSTOCK,
-              ISCOSTCENTRESON, GSTAPPLICABLE, TDSAPPLICABLE,
-              NARRATION
+              GUID, NAME, PARENT, DESCRIPTION, OPENINGBALANCE, CLOSINGBALANCE,
+              GSTAPPLICABLE, ISCOSTCENTRESON, MAILINGNAME, PINCODE, STATENAME,
+              COUNTRYNAME, PARTYGSTIN, PANNUMBER, LEDGERPHONE, EMAIL, NARRATION
             </FETCH>
           </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Cost Centres
+   */
+  static buildCostCentreRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>CostCentreCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="CostCentreCollection">
+            <TYPE>Cost Centre</TYPE>
+            <FETCH>GUID, NAME, PARENT, CATEGORY</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Stock Items
+   */
+  static buildStockItemRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>StockItemCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="StockItemCollection">
+            <TYPE>StockItem</TYPE>
+            <FETCH>
+              GUID, NAME, PARENT, BASEUNITS, OPENINGBALANCE, OPENINGRATE, OPENINGVALUE,
+              CLOSINGBALANCE, CLOSINGRATE, CLOSINGVALUE, GSTAPPLICABLE, GSTTYPEOFSUPPLY,
+              HSNCODE, DESCRIPTION
+            </FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Stock Groups
+   */
+  static buildStockGroupRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>StockGroupCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="StockGroupCollection">
+            <TYPE>StockGroup</TYPE>
+            <FETCH>GUID, NAME, PARENT, ISADDABLE</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Units of Measurement
+   */
+  static buildUnitRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>UnitCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="UnitCollection">
+            <TYPE>Unit</TYPE>
+            <FETCH>GUID, NAME, ORIGINALNAME, DECIMALPLACES, ISGSTEXCLUDED</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Godowns (Locations)
+   */
+  static buildGodownRequest() {
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>GodownCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="GodownCollection">
+            <TYPE>Godown</TYPE>
+            <FETCH>GUID, NAME, PARENT, ADDRESS, PINCODE</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Sales Orders
+   */
+  static buildSalesOrderRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>SalesOrderCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="SalesOrderCollection">
+            <TYPE>Voucher</TYPE>
+            <FILTER>IsSalesOrderVch</FILTER>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, PARTYGSTIN, PLACEOFSUPPLY, NARRATION,
+              BASICDUEDATE, ALLINVENTORYENTRIES.*, LEDGERENTRIES.*
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsSalesOrderVch">
+            $$IsSalesOrder:$VoucherTypeName
+          </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Purchase Orders
+   */
+  static buildPurchaseOrderRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>PurchaseOrderCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="PurchaseOrderCollection">
+            <TYPE>Voucher</TYPE>
+            <FILTER>IsPurchaseOrderVch</FILTER>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, PARTYGSTIN, PLACEOFSUPPLY, NARRATION,
+              BASICDUEDATE, ALLINVENTORYENTRIES.*, LEDGERENTRIES.*
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsPurchaseOrderVch">
+            $$IsPurchaseOrder:$VoucherTypeName
+          </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Delivery Notes
+   */
+  static buildDeliveryNoteRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>DeliveryNoteCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="DeliveryNoteCollection">
+            <TYPE>Voucher</TYPE>
+            <FILTER>IsDelNoteVch</FILTER>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, PARTYGSTIN, PLACEOFSUPPLY, NARRATION,
+              ALLINVENTORYENTRIES.*, LEDGERENTRIES.*
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsDelNoteVch">
+            $$IsDeliveryNote:$VoucherTypeName
+          </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Receipt Notes
+   */
+  static buildReceiptNoteRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>ReceiptNoteCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="ReceiptNoteCollection">
+            <TYPE>Voucher</TYPE>
+            <FILTER>IsRcptNoteVch</FILTER>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, PARTYGSTIN, PLACEOFSUPPLY, NARRATION,
+              ALLINVENTORYENTRIES.*, LEDGERENTRIES.*
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsRcptNoteVch">
+            $$IsReceiptNote:$VoucherTypeName
+          </SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>

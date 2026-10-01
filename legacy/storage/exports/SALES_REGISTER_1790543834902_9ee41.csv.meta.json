@@ -1,0 +1,12 @@
+{
+  "fileKey": "SALES_REGISTER_1790543834902_9ee41.csv",
+  "filename": "SALES_REGISTER_1790543834902_9ee41.csv",
+  "sizeBytes": 45003,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:17:14.907Z",
+  "metadata": {
+    "dataset": "SALES_REGISTER",
+    "rowCount": 500,
+    "tenantId": "ten_d28f6dfcb8c3"
+  }
+}

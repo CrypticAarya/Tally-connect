@@ -5,11 +5,11 @@ import { config } from '../config.js';
 const { Pool } = pg;
 
 export const pool = new Pool({
-  host: config.db?.host || process.env.PGHOST || 'localhost',
-  port: config.db?.port || parseInt(process.env.PGPORT || '5432', 10),
-  database: config.db?.database || process.env.PGDATABASE || 'tally_connect',
-  user: config.db?.user || process.env.PGUSER || process.env.USER || 'eunoia',
-  password: config.db?.password || process.env.PGPASSWORD || '',
+  host: process.env.PGHOST || config.pg?.host || 'localhost',
+  port: parseInt(process.env.PGPORT || (config.pg?.port ?? '5432'), 10),
+  database: process.env.PGDATABASE || config.pg?.database || 'tally_connect',
+  user: process.env.PGUSER || config.pg?.user || process.env.USER || 'eunoia',
+  password: process.env.PGPASSWORD || config.pg?.password || '',
   max: 15,
   idleTimeoutMillis: 30000
 });
@@ -57,10 +57,21 @@ export function verifyPassword(password, storedHash) {
   return candidateHash === originalHash;
 }
 
+import { initMySqlDb, pool as mysqlPool } from './mysql.js';
+export { mysqlPool, initMySqlDb };
+export { SaasRepository } from './saasRepository.js';
+
 /**
- * Initializes database tables and indices for Tally Connect Beta Hardening
+ * Initializes database tables and indices for Tally Connect Beta Hardening and MySQL SaaS Platform
  */
 export async function initDb() {
+  // 1. Initialize MySQL schema for SaaS Integration Platform
+  try {
+    await initMySqlDb();
+  } catch (err) {
+    console.error('[Database] MySQL initialization warning:', err.message);
+  }
+
   console.log('[Database] Initializing PostgreSQL schema for Tally Connect multi-tenant engine...');
 
   const ddl = `

@@ -11,6 +11,13 @@ export class Logger {
     this._ensureDir();
   }
 
+  setLogsDir(dir) {
+    this.logsDir = path.resolve(dir);
+    this.agentLogPath = path.join(this.logsDir, 'agent.log');
+    this.errorLogPath = path.join(this.logsDir, 'errors.log');
+    this._ensureDir();
+  }
+
   _ensureDir() {
     if (!fs.existsSync(this.logsDir)) {
       try {

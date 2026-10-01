@@ -41,11 +41,11 @@ export class JobProcessor {
     this.isProcessing = false;
     this.timer = null;
 
-    // Use passed adapter or instantiate TallyXmlHttpAdapter with fallback
+    // Use passed adapter or instantiate TallyXmlHttpAdapter with real connection
     this.tallyAdapter = tallyAdapter || new TallyXmlHttpAdapter({
       host: config.tallyHost || '127.0.0.1',
       port: config.tallyPort || 9000,
-      fixtureFallback: true
+      fixtureFallback: process.env.TALLY_SIMULATE === 'true'
     });
   }
 

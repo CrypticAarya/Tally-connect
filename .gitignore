@@ -6,3 +6,10 @@ logs/*.log
 connector-agent/logs/*.log
 connector-agent/bin/
 scratch/
+.env
+.env.*
+*.env
+server/.env
+!.env.example
+!server/.env.example
+!server/.env.production.example

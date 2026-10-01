@@ -1,5 +1,5 @@
-import { CloudClient } from './cloudClient.js';
-import { JobProcessor } from './jobProcessor.js';
+import { CloudClient } from './src/cloudClient.js';
+import { JobProcessor } from './src/jobProcessor.js';
 import { TallyXmlHttpAdapter } from '../server/src/adapters/tallyXmlHttpAdapter.js';
 
 const CLOUD_URL = 'http://localhost:5001';

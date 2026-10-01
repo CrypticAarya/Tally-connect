@@ -65,13 +65,10 @@ export class TallyXmlParser {
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
       trimValues: true,
-      parseTagValue: false // Preserve raw string tokens
+      parseTagValue: false
     });
   }
 
-  /**
-   * Parses raw XML string into JavaScript object tree
-   */
   parseRawXml(xmlString) {
     if (!xmlString || typeof xmlString !== 'string') {
       throw new Error('TallyXmlParser received empty or non-string XML input');
@@ -79,9 +76,6 @@ export class TallyXmlParser {
     return this.parser.parse(xmlString);
   }
 
-  /**
-   * Normalizes Company discovery XML into standard company info
-   */
   normalizeCompany(xmlString) {
     const parsed = this.parseRawXml(xmlString);
     const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
@@ -108,9 +102,6 @@ export class TallyXmlParser {
     };
   }
 
-  /**
-   * Normalizes Customer Master XML into standard ledger objects
-   */
   normalizeCustomers(xmlString) {
     const parsed = this.parseRawXml(xmlString);
     const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
@@ -121,7 +112,6 @@ export class TallyXmlParser {
       const guid = node.GUID || `cust-guid-${101 + idx}`;
       const code = node.GUID ? node.GUID.slice(0, 10) : `CUST-${101 + idx}`;
 
-      // Address lines aggregation from <ADDRESS.LIST>
       const addressLines = [];
       if (node['ADDRESS.LIST']) {
         const addrNode = ensureArray(node['ADDRESS.LIST'])[0];
@@ -132,7 +122,6 @@ export class TallyXmlParser {
         }
       }
 
-      // Bank details from <BANKDETAILS.LIST>
       let bank = {};
       if (node['BANKDETAILS.LIST']) {
         const bankNode = ensureArray(node['BANKDETAILS.LIST'])[0];
@@ -182,33 +171,110 @@ export class TallyXmlParser {
           paymentTerms: node.BILLCREDITPERIOD || 'Net 30 Days',
           currency: 'INR'
         },
-        organization: {
-          branch: 'Main Branch',
-          salesRepresentative: '',
-          mainDistributor: '',
-          mainDealer: '',
-          mainAgent: '',
-          subDistributor: '',
-          subDealer: '',
-          subAgent: ''
-        },
         banking: {
           bankName: bank.bankName || '',
           ifscCode: bank.ifscCode || '',
-          accountNumber: bank.accountNumber || '',
-          startDate: '',
-          endDate: ''
+          accountNumber: bank.accountNumber || ''
         },
-        active: true,
-        remarks: 'Live Tally Ledger'
+        openingBalance: parseTallyAmount(node.OPENINGBALANCE),
+        closingBalance: parseTallyAmount(node.CLOSINGBALANCE),
+        active: true
       };
     });
   }
 
-  /**
-   * Normalizes Chart of Accounts XML into standard hierarchy records
-   */
-  normalizeChartOfAccounts(xmlString) {
+  normalizeVendors(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const ledgerNodes = ensureArray(collection?.LEDGER);
+
+    return ledgerNodes.map((node, idx) => {
+      const name = node.NAME || node['@_NAME'] || '';
+      const guid = node.GUID || `vend-guid-${201 + idx}`;
+      const code = node.GUID ? node.GUID.slice(0, 10) : `VEND-${201 + idx}`;
+
+      const addressLines = [];
+      if (node['ADDRESS.LIST']) {
+        const addrNode = ensureArray(node['ADDRESS.LIST'])[0];
+        if (addrNode && addrNode.ADDRESS) {
+          ensureArray(addrNode.ADDRESS).forEach(line => {
+            if (line && typeof line === 'string') addressLines.push(line.trim());
+          });
+        }
+      }
+
+      let bank = {};
+      if (node['BANKDETAILS.LIST']) {
+        const bankNode = ensureArray(node['BANKDETAILS.LIST'])[0];
+        if (bankNode) {
+          bank = {
+            bankName: bankNode.BANKNAME || '',
+            ifscCode: bankNode.IFSCCODE || '',
+            accountNumber: bankNode.ACCOUNTNUMBER || ''
+          };
+        }
+      }
+
+      const gstin = node.PARTYGSTIN || '';
+      const pan = node.PANNUMBER || extractPanFromGstin(gstin);
+      const stateName = node.STATENAME || '';
+
+      return {
+        guid,
+        name,
+        code,
+        parent: node.PARENT || 'Sundry Creditors',
+        vendorType: 'Supplier',
+        status: 'Active',
+        contact: {
+          name: node.LEDGERCONTACT || '',
+          email: node.EMAIL || '',
+          phone: node.LEDGERPHONE || ''
+        },
+        mailingDetails: {
+          addressLines: addressLines.length ? addressLines : [node.MAILINGNAME || name],
+          city: stateName,
+          state: stateName,
+          postalCode: node.PINCODE || '',
+          country: node.COUNTRYNAME || 'India'
+        },
+        statutory: {
+          gstin,
+          pan,
+          stateName
+        },
+        creditPolicy: {
+          creditDays: parseInt(node.BILLCREDITPERIOD || '30', 10) || 30,
+          creditLimit: parseFloat(node.CREDITLIMIT || '0') || 0
+        },
+        banking: {
+          bankName: bank.bankName || '',
+          ifscCode: bank.ifscCode || '',
+          accountNumber: bank.accountNumber || ''
+        },
+        openingBalance: parseTallyAmount(node.OPENINGBALANCE),
+        closingBalance: parseTallyAmount(node.CLOSINGBALANCE),
+        active: true
+      };
+    });
+  }
+
+  normalizeGroups(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const groupNodes = ensureArray(collection?.GROUP);
+
+    return groupNodes.map((node, idx) => ({
+      guid: node.GUID || `grp-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      parent: node.PARENT || 'Primary',
+      isAddable: node.ISADDABLE === 'Yes',
+      isSubLedger: node.ISSUBLEDGER === 'Yes',
+      isCalculate: node.BASICGROUPISCALCULATE === 'Yes'
+    }));
+  }
+
+  normalizeLedgers(xmlString) {
     const parsed = this.parseRawXml(xmlString);
     const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
     const ledgerNodes = ensureArray(collection?.LEDGER);
@@ -216,44 +282,113 @@ export class TallyXmlParser {
     return ledgerNodes.map((node, idx) => {
       const name = node.NAME || node['@_NAME'] || '';
       const parent = node.PARENT || 'Primary';
-      
-      let grouping = 'Assets/Liabilities';
-      if (parent.toLowerCase().includes('sales') || parent.toLowerCase().includes('income')) {
-        grouping = 'Direct Incomes';
-      } else if (parent.toLowerCase().includes('duties') || parent.toLowerCase().includes('taxes')) {
-        grouping = 'Current Liabilities';
-      } else if (parent.toLowerCase().includes('debtor') || parent.toLowerCase().includes('bank')) {
-        grouping = 'Current Assets';
-      }
+      const gstin = node.PARTYGSTIN || '';
 
       return {
-        guid: node.GUID || `gl-guid-${idx + 1}`,
-        code: `GL-${2000 + idx}`,
+        guid: node.GUID || `ledg-${idx + 1}`,
         name,
-        description: node.DESCRIPTION || `Ledger under ${parent}`,
         parent,
-        grouping,
-        financialSummaryGrouping: parent,
-        branch: 'Main Branch',
-        costCenter: node.ISCOSTCENTRESON === 'Yes' ? 'Cost Center Applicable' : '',
-        costClassification: 'Direct',
-        costBehaviour: 'Variable',
-        svVariablePercent: 100.0,
-        isInterBranch: false,
-        isRelatedParty: false,
+        description: node.DESCRIPTION || '',
+        openingBalance: parseTallyAmount(node.OPENINGBALANCE),
+        closingBalance: parseTallyAmount(node.CLOSINGBALANCE),
         gstApplicable: node.GSTAPPLICABLE || 'Applicable',
-        tdsApplicable: node.TDSAPPLICABLE || 'Not Applicable',
-        active: true,
-        remarks: node.NARRATION || 'Imported from Tally'
+        isCostCentresOn: node.ISCOSTCENTRESON === 'Yes',
+        mailingName: node.MAILINGNAME || name,
+        city: node.STATENAME || '',
+        state: node.STATENAME || '',
+        pincode: node.PINCODE || '',
+        country: node.COUNTRYNAME || 'India',
+        gstin,
+        pan: node.PANNUMBER || extractPanFromGstin(gstin),
+        phone: node.LEDGERPHONE || '',
+        email: node.EMAIL || '',
+        narration: node.NARRATION || ''
       };
     });
   }
 
-  /**
-   * Normalizes Sales Vouchers XML into hierarchical voucher structures
-   * preserving ALLINVENTORYENTRIES and LEDGERENTRIES
-   */
-  normalizeSalesVouchers(xmlString) {
+  normalizeChartOfAccounts(xmlString) {
+    return this.normalizeLedgers(xmlString);
+  }
+
+  normalizeCostCentres(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const ccNodes = ensureArray(collection?.COSTCENTRE);
+
+    return ccNodes.map((node, idx) => ({
+      guid: node.GUID || `cc-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      parent: node.PARENT || 'Primary',
+      category: node.CATEGORY || 'Primary Cost Category'
+    }));
+  }
+
+  normalizeStockItems(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const itemNodes = ensureArray(collection?.STOCKITEM);
+
+    return itemNodes.map((node, idx) => ({
+      guid: node.GUID || `item-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      parent: node.PARENT || 'Stock Items',
+      uom: node.BASEUNITS || 'NOS',
+      openingQuantity: parseTallyQty(node.OPENINGBALANCE),
+      openingRate: parseTallyRate(node.OPENINGRATE),
+      openingValue: parseTallyAmount(node.OPENINGVALUE),
+      closingQuantity: parseTallyQty(node.CLOSINGBALANCE),
+      closingRate: parseTallyRate(node.CLOSINGRATE),
+      closingValue: parseTallyAmount(node.CLOSINGVALUE),
+      gstApplicable: node.GSTAPPLICABLE || 'Applicable',
+      gstRate: 18.0,
+      hsnCode: node.HSNCODE || '',
+      description: node.DESCRIPTION || ''
+    }));
+  }
+
+  normalizeStockGroups(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const grpNodes = ensureArray(collection?.STOCKGROUP);
+
+    return grpNodes.map((node, idx) => ({
+      guid: node.GUID || `stkgrp-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      parent: node.PARENT || 'Primary',
+      isAddable: node.ISADDABLE === 'Yes'
+    }));
+  }
+
+  normalizeUnits(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const unitNodes = ensureArray(collection?.UNIT);
+
+    return unitNodes.map((node, idx) => ({
+      guid: node.GUID || `unit-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      originalName: node.ORIGINALNAME || node.NAME || '',
+      decimalPlaces: parseInt(node.DECIMALPLACES || '0', 10),
+      isGstExcluded: node.ISGSTEXCLUDED === 'Yes'
+    }));
+  }
+
+  normalizeGodowns(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
+    const gNodes = ensureArray(collection?.GODOWN);
+
+    return gNodes.map((node, idx) => ({
+      guid: node.GUID || `godown-${idx + 1}`,
+      name: node.NAME || node['@_NAME'] || '',
+      parent: node.PARENT || 'Primary',
+      address: node.ADDRESS || '',
+      pincode: node.PINCODE || ''
+    }));
+  }
+
+  _parseVouchers(xmlString, defaultType = 'Voucher') {
     const parsed = this.parseRawXml(xmlString);
     const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
     const voucherNodes = ensureArray(collection?.VOUCHER);
@@ -261,159 +396,112 @@ export class TallyXmlParser {
     return voucherNodes.map((vch, vIdx) => {
       const voucherNumber = vch.VOUCHERNUMBER || `VCH-${vIdx + 1}`;
       const voucherDate = formatTallyDateToIso(vch.DATE) || '2026-04-01';
+      const dueDate = formatTallyDateToIso(vch.BASICDUEDATE) || voucherDate;
       const partyName = vch.PARTYLEDGERNAME || '';
       const partyGstin = vch.PARTYGSTIN || '';
       const placeOfSupply = vch.PLACEOFSUPPLY || 'Maharashtra';
       const narration = vch.NARRATION || '';
 
-      // 1. Process Inventory Line Items from <ALLINVENTORYENTRIES.LIST>
       const invNodes = ensureArray(vch['ALLINVENTORYENTRIES.LIST']);
-      const allInventoryEntries = invNodes.map((item, iIdx) => {
-        const itemDescription = item.STOCKITEMNAME || `Item ${iIdx + 1}`;
-        const hsn = item.HSNCODE || '';
-        const godown = item.GODOWNNAME || '';
+      const items = invNodes.map((item, iIdx) => {
+        const itemName = item.STOCKITEMNAME || `Item ${iIdx + 1}`;
         const qty = parseTallyQty(item.BILLEDQTY);
         const rate = parseTallyRate(item.RATE);
         const amount = parseTallyAmount(item.AMOUNT);
-
-        // Tax calculation: Detect GST rates from ledger entries or default standard 18% (9% CGST + 9% SGST, or 18% IGST)
-        const isInterState = placeOfSupply && !placeOfSupply.toLowerCase().includes('maharashtra');
-        const gstRate = 18.0;
-
-        let cgstRate = 0, cgstAmount = 0, sgstRate = 0, sgstAmount = 0, igstRate = 0, igstAmount = 0;
-        if (isInterState) {
-          igstRate = gstRate;
-          igstAmount = Number(((amount * igstRate) / 100).toFixed(2));
-        } else {
-          cgstRate = gstRate / 2;
-          cgstAmount = Number(((amount * cgstRate) / 100).toFixed(2));
-          sgstRate = gstRate / 2;
-          sgstAmount = Number(((amount * sgstRate) / 100).toFixed(2));
-        }
-
-        const batchAllocations = [];
-        if (item['BATCHALLOCATIONS.LIST']) {
-          ensureArray(item['BATCHALLOCATIONS.LIST']).forEach(b => {
-            batchAllocations.push({
-              batchNo: b.BATCHNAME || `BATCH-${iIdx + 1}`,
-              godown: b.GODOWNNAME || godown,
-              qty: parseTallyQty(b.BILLEDQTY) || qty
-            });
-          });
-        }
-
+        const godown = item.GODOWNNAME || '';
         return {
-          itemDescription,
-          hsn,
-          godown,
-          qty,
+          itemName,
+          quantity: qty,
           rate,
-          discount: 0,
-          taxValue: amount,
-          cgstRate,
-          cgstAmount,
-          sgstRate,
-          sgstAmount,
-          igstRate,
-          igstAmount,
-          batchAllocations
+          amount,
+          godown,
+          unit: item.BASEUNITS || 'NOS',
+          hsnCode: item.HSNCODE || ''
         };
       });
 
-      // 2. Process Accounting Ledger Postings from <LEDGERENTRIES.LIST>
       const ledgerNodes = ensureArray(vch['LEDGERENTRIES.LIST']);
-      let otherCharges = 0;
-      let totalInvoice = 0;
-
+      let calculatedTotal = 0;
       const ledgerEntries = ledgerNodes.map(lNode => {
         const ledgerName = lNode.LEDGERNAME || '';
         const amount = parseTallyAmount(lNode.AMOUNT);
         const isDeemedPositive = (lNode.ISDEEMEDPOSITIVE === 'Yes');
-
-        let taxType = 'OTHER_CHARGES';
         if (ledgerName === partyName) {
-          taxType = 'PARTY';
-          totalInvoice = amount;
-        } else if (ledgerName.toLowerCase().includes('sales')) {
-          taxType = 'SALES';
-        } else if (ledgerName.toLowerCase().includes('cgst')) {
-          taxType = 'CGST';
-        } else if (ledgerName.toLowerCase().includes('sgst')) {
-          taxType = 'SGST';
-        } else if (ledgerName.toLowerCase().includes('igst')) {
-          taxType = 'IGST';
-        } else {
-          taxType = 'OTHER_CHARGES';
-          otherCharges += amount;
+          calculatedTotal = amount;
         }
-
         return {
           ledgerName,
-          isDeemedPositive,
-          amount: isDeemedPositive ? -amount : amount,
-          taxType
+          amount: isDeemedPositive ? -amount : amount
         };
       });
 
-      // Fallback total invoice calculation if party ledger total was 0
-      if (!totalInvoice) {
-        const itemTotal = allInventoryEntries.reduce((sum, item) => sum + (item.taxValue + item.cgstAmount + item.sgstAmount + item.igstAmount), 0);
-        totalInvoice = Number((itemTotal + otherCharges).toFixed(2));
+      if (!calculatedTotal) {
+        calculatedTotal = items.reduce((s, it) => s + it.amount, 0);
       }
 
       return {
-        voucherKey: vch.GUID || `vch-guid-${vIdx + 1}`,
-        date: voucherDate,
+        id: vch.GUID || `vch-guid-${vIdx + 1}`,
+        guid: vch.GUID || `vch-guid-${vIdx + 1}`,
+        orderNumber: voucherNumber,
         voucherNumber,
-        invoiceDate: voucherDate,
-        voucherType: vch.VOUCHERTYPENAME || 'Sales',
+        date: voucherDate,
+        dueDate,
+        voucherType: vch.VOUCHERTYPENAME || defaultType,
+        partyName,
         partyLedgerName: partyName,
-        partyCode: partyGstin ? partyGstin.slice(2, 10) : `CUST-${vIdx + 1}`,
         partyGstin,
-        customerType: 'B2B',
-        salesType: partyGstin.startsWith('27') ? 'Intra-State Taxable' : 'Inter-State Taxable',
-        branchName: 'Main Branch',
-        branchCode: 'B001',
-        costCenter: 'General Distribution',
         placeOfSupply,
-        paymentTerms: 'Net 30 Days',
-        dueDate: voucherDate,
-        paymentStatus: 'Unpaid',
-        paymentDate: '',
-        modeOfPayment: 'Bank Transfer',
         narration,
-        otherCharges,
-        totalInvoice,
-        allInventoryEntries,
+        amount: calculatedTotal,
+        totalInvoice: calculatedTotal,
+        items,
+        allInventoryEntries: items,
         ledgerEntries
       };
     });
   }
 
-  /**
-   * Normalizes Trial Balance XML into standard ledger balance records
-   */
+  normalizeSalesOrders(xmlString) {
+    return this._parseVouchers(xmlString, 'Sales Order');
+  }
+
+  normalizePurchaseOrders(xmlString) {
+    return this._parseVouchers(xmlString, 'Purchase Order');
+  }
+
+  normalizeDeliveryNotes(xmlString) {
+    return this._parseVouchers(xmlString, 'Delivery Note');
+  }
+
+  normalizeReceiptNotes(xmlString) {
+    return this._parseVouchers(xmlString, 'Receipt Note');
+  }
+
+  normalizeSalesVouchers(xmlString) {
+    return this._parseVouchers(xmlString, 'Sales');
+  }
+
   normalizeTrialBalance(xmlString) {
     const parsed = this.parseRawXml(xmlString);
     const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
     const ledgerNodes = ensureArray(collection?.LEDGER);
 
-    return ledgerNodes.map(node => {
+    return ledgerNodes.map((node, idx) => {
       const name = node.NAME || node['@_NAME'] || '';
-      const closingRaw = parseFloat(node.CLOSINGBALANCE || '0');
-      const closing = Math.abs(closingRaw);
-      const drCr = closingRaw < 0 ? 'Dr' : 'Cr';
+      const parent = node.PARENT || 'Primary';
+      const opening = parseTallyAmount(node.OPENINGBALANCE);
+      const debit = parseTallyAmount(node.DEBITTOTALS);
+      const credit = parseTallyAmount(node.CREDITTOTALS);
+      const closing = parseTallyAmount(node.CLOSINGBALANCE);
 
       return {
-        monthYear: '2026-04',
-        branch: 'Main Branch',
-        particulars: node.PARENT || 'General Ledger',
+        guid: node.GUID || `tb-guid-${idx + 1}`,
         name,
-        opening: parseTallyAmount(node.OPENINGBALANCE),
-        debit: parseTallyAmount(node.DEBITTOTALS),
-        credit: parseTallyAmount(node.CREDITTOTALS),
-        closing,
-        drCr
+        parent,
+        openingBalance: opening,
+        debitTotals: debit,
+        creditTotals: credit,
+        closingBalance: closing
       };
     });
   }

@@ -1,0 +1,12 @@
+{
+  "fileKey": "ChartAccounts_20260927_0dd4b.csv",
+  "filename": "ChartAccounts_20260927_0dd4b.csv",
+  "sizeBytes": 1275,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T20:37:58.188Z",
+  "metadata": {
+    "dataset": "CHART_OF_ACCOUNTS",
+    "rowCount": 4,
+    "tenantId": "ten_default"
+  }
+}

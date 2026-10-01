@@ -1,0 +1,12 @@
+{
+  "fileKey": "CUSTOMER_1790543094200_ee947.csv",
+  "filename": "CUSTOMER_1790543094200_ee947.csv",
+  "sizeBytes": 11610,
+  "mimeType": "text/csv",
+  "createdAt": "2026-09-27T21:04:54.218Z",
+  "metadata": {
+    "dataset": "CUSTOMER",
+    "rowCount": 100,
+    "tenantId": "ten_d6d0d24182bf"
+  }
+}
