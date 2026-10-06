@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getAllEntities, getEntityById } from '../../connector-agent/src/extraction/entityRegistry.js';
+import { getAllEntities, getEntityById, MASTER_DATA_IDS, DATE_FILTERED_IDS, isDateFilteredEntity } from '../../connector-agent/src/extraction/entityRegistry.js';
 import { DATASET_SCHEMAS, getSchema } from '../../connector-agent/src/engine/schemas.js';
 import { Transformer } from '../../connector-agent/src/engine/transformer.js';
-import { TallyXmlParser } from '../../connector-agent/src/adapters/xmlParser.js';
+import { TallyXmlParser, extractTextValue, computeFinancialYear } from '../../connector-agent/src/adapters/xmlParser.js';
 import { LocalExportStorage } from '../../connector-agent/src/storage/localExportStorage.js';
 import { CsvExporter } from '../../connector-agent/src/export/csvExporter.js';
 import { ExtractionService } from '../../connector-agent/src/extraction/extractionService.js';
@@ -39,13 +39,13 @@ async function run() {
   // -----------------------------------------------------------------
   console.log('▶ Test 1: Central Entity Registry Completeness');
   const allEntities = getAllEntities();
-  assert(allEntities.length === 15, `All 15 scoped datasets registered (got ${allEntities.length})`);
+  assert(allEntities.length >= 15, `All scoped datasets registered (got ${allEntities.length})`);
 
   const expectedIds = [
     'ledgers', 'groups', 'cost_centers', 'customers', 'vendors',
     'stock_items', 'stock_groups', 'units', 'godowns',
     'sales_orders', 'purchase_orders', 'delivery_notes', 'receipt_notes',
-    'trial_balance', 'sales_register'
+    'trial_balance', 'sales_register', 'purchase_register'
   ];
 
   for (const id of expectedIds) {
@@ -299,11 +299,138 @@ async function run() {
     assert(fs.existsSync(f.filePath), `File "${f.filename}" verified on disk (${f.sizeBytes} bytes)`);
   }
 
+  // -----------------------------------------------------------------
+  // 7. Bug 1: Object-vs-String Normalization (Company Name & Fields)
+  // -----------------------------------------------------------------
+  console.log('\n▶ Test 7: Bug 1 — Object-vs-String Normalization (Company Name & Fields)');
+  const companyXmlWithAttributes = `
+<ENVELOPE>
+  <BODY>
+    <DATA>
+      <COLLECTION>
+        <COMPANY NAME="Real Test Company Pvt Ltd">
+          <NAME TYPE="String">Real Test Company Pvt Ltd</NAME>
+          <GUID TYPE="String">comp-guid-777</GUID>
+          <STARTINGFROM TYPE="Date">20260401</STARTINGFROM>
+        </COMPANY>
+      </COLLECTION>
+    </DATA>
+  </BODY>
+</ENVELOPE>`;
+  const compAttr = parser.normalizeCompany(companyXmlWithAttributes);
+  assert(typeof compAttr.name === 'string', 'Company name is a string type');
+  assert(compAttr.name === 'Real Test Company Pvt Ltd', `Parsed company name is exact string: "${compAttr.name}"`);
+  assert(compAttr.name !== '[object Object]', 'Company name is NOT [object Object]');
+  assert(compAttr.guid === 'comp-guid-777', 'GUID is clean string');
+
+  // Verify extractTextValue handles various structures
+  assert(extractTextValue('Simple String') === 'Simple String', 'extractTextValue on string');
+  assert(extractTextValue({ '#text': 'Text Inside Node' }) === 'Text Inside Node', 'extractTextValue on #text');
+  assert(extractTextValue({ value: 'Value Inside Node' }) === 'Value Inside Node', 'extractTextValue on value');
+  assert(extractTextValue({ '@_NAME': 'Attr Name' }) === 'Attr Name', 'extractTextValue on @_NAME');
+  assert(extractTextValue(null) === '', 'extractTextValue on null is empty string');
+  assert(extractTextValue(undefined) === '', 'extractTextValue on undefined is empty string');
+
+  // -----------------------------------------------------------------
+  // 8. Bug 2: Financial Year Dynamic Range Calculation
+  // -----------------------------------------------------------------
+  console.log('\n▶ Test 8: Bug 2 — Financial Year Dynamic Range Calculation');
+  // When Tally returns equal STARTINGFROM and ENDINGAT (or missing ENDINGAT)
+  const fy1 = computeFinancialYear('20260401', '20260401');
+  assert(fy1.from === '2026-04-01', 'FY from is 2026-04-01');
+  assert(fy1.to === '2027-03-31', `FY to is calculated as 2027-03-31 (12 months minus 1 day), got "${fy1.to}"`);
+  assert(fy1.to !== '2026-04-01', 'FY to is NOT equal to FY from');
+
+  // When Tally provides only STARTINGFROM
+  const fy2 = computeFinancialYear('20250401', '');
+  assert(fy2.from === '2025-04-01', 'FY from is 2025-04-01');
+  assert(fy2.to === '2026-03-31', 'FY to is 2026-03-31');
+
+  // When Tally provides valid distinct range
+  const fy3 = computeFinancialYear('20240401', '20250331');
+  assert(fy3.from === '2024-04-01' && fy3.to === '2025-03-31', 'FY preserves valid full range');
+
+  // When no dates provided, fallback to current calendar financial year
+  const fy4 = computeFinancialYear('', '');
+  assert(/^\d{4}-04-01$/.test(fy4.from), `FY fallback from matches YYYY-04-01: ${fy4.from}`);
+  assert(/^\d{4}-03-31$/.test(fy4.to), `FY fallback to matches YYYY-03-31: ${fy4.to}`);
+
+  // -----------------------------------------------------------------
+  // 9. Bug 3: Dataset-Aware Date Filtering Logic
+  // -----------------------------------------------------------------
+  console.log('\n▶ Test 9: Bug 3 — Dataset-Aware Date Filtering Logic');
+  const masterList = [
+    'ledgers', 'groups', 'cost_centers', 'customers', 'vendors',
+    'stock_items', 'stock_groups', 'units', 'godowns'
+  ];
+  for (const mId of masterList) {
+    assert(isDateFilteredEntity(mId) === false, `Master dataset "${mId}" does NOT require date filter`);
+  }
+
+  const dateFilteredList = [
+    'sales_orders', 'purchase_orders', 'delivery_notes', 'receipt_notes',
+    'trial_balance', 'sales_register'
+  ];
+  for (const dId of dateFilteredList) {
+    assert(isDateFilteredEntity(dId) === true, `Date-filtered dataset "${dId}" requires date filter`);
+  }
+
+  // -----------------------------------------------------------------
+  // 10. Bug 4: 0-Record Valid CSV Generation & Error Reporting
+  // -----------------------------------------------------------------
+  console.log('\n▶ Test 10: Bug 4 — 0-Record Valid CSV Generation & Error Reporting');
+  // 10a: Exporting empty dataset generates valid CSV with headers (size > 0)
+  const emptyGodownsResult = await CsvExporter.exportToStorage('godowns', [], {
+    storage: testStorage
+  });
+  assert(emptyGodownsResult.rowCount === 0, 'Empty export reports rowCount = 0');
+  assert(fs.existsSync(emptyGodownsResult.filePath), 'Empty export CSV file was created');
+  assert(emptyGodownsResult.sizeBytes > 0, `Empty export CSV is > 0 bytes (got ${emptyGodownsResult.sizeBytes} bytes)`);
+  const emptyCsvContent = fs.readFileSync(emptyGodownsResult.filePath, 'utf-8');
+  assert(emptyCsvContent.includes('Godown Name,Parent,Address,Pincode'), 'Empty CSV contains schema headers');
+
+  // 10b: Tally error XML must throw and never be treated as empty success
+  const tallyLineErrorXml = `
+<ENVELOPE>
+  <HEADER><STATUS>1</STATUS></HEADER>
+  <BODY>
+    <DATA>
+      <LINEERROR>Voucher type 'Sales' not found in active company</LINEERROR>
+    </DATA>
+  </BODY>
+</ENVELOPE>`;
+  let caughtLineError = false;
+  try {
+    parser.parseRawXml(tallyLineErrorXml);
+  } catch (err) {
+    caughtLineError = true;
+    assert(err.code === 'TALLY_LINE_ERROR', `Throws TALLY_LINE_ERROR: ${err.message}`);
+    assert(err.message.includes('Voucher type'), 'Error message contains line error detail');
+  }
+  assert(caughtLineError, 'Tally LINEERROR triggers thrown exception');
+
+  const tallyStatusZeroXml = `
+<ENVELOPE>
+  <HEADER>
+    <STATUS>0</STATUS>
+    <ERROR>Action failed due to invalid company state</ERROR>
+  </HEADER>
+  <BODY></BODY>
+</ENVELOPE>`;
+  let caughtStatusZero = false;
+  try {
+    parser.parseRawXml(tallyStatusZeroXml);
+  } catch (err) {
+    caughtStatusZero = true;
+    assert(err.code === 'TALLY_ERROR', `Throws TALLY_ERROR on STATUS=0: ${err.message}`);
+  }
+  assert(caughtStatusZero, 'STATUS=0 triggers thrown exception');
+
   // Cleanup test directory
   fs.rmSync(TEST_EXPORTS_DIR, { recursive: true, force: true });
 
   console.log('\n===============================================================');
-  console.log('✔ ALL EXTRACTION & ZERO-MOCK PIPELINE TESTS PASSED (6/6)');
+  console.log('✔ ALL EXTRACTION & ZERO-MOCK PIPELINE TESTS PASSED (10/10)');
   console.log('===============================================================\n');
 }
 

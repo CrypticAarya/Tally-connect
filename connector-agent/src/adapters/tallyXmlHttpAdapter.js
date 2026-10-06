@@ -124,6 +124,8 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
         version: companyInfo.tallyVersion,
         port: this.port,
         financialYear: `${companyInfo.financialYearFrom} to ${companyInfo.financialYearTo}`,
+        financialYearFrom: companyInfo.financialYearFrom,
+        financialYearTo: companyInfo.financialYearTo,
         message: `Connected to TallyPrime at ${this.baseUrl} ("${companyInfo.name}")`
       };
     } catch (err) {
@@ -288,6 +290,15 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
     const xmlRequest = TdlBuilder.buildSalesRegisterRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'sales_register');
     return this.parser.normalizeSalesVouchers(xmlResponse);
+  }
+
+  /**
+   * Fetches Purchase Register vouchers
+   */
+  async fetchPurchaseRegister(options = {}) {
+    const xmlRequest = TdlBuilder.buildPurchaseRegisterRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'purchase_register');
+    return this.parser.normalizePurchaseVouchers(xmlResponse);
   }
 
   /**

@@ -1,12 +1,22 @@
 /**
  * Schemas Definition Module for Tally Connect
  * 
- * Defines clean, genuine CSV column schemas for all 15 Tally datasets.
- * Only genuine Tally fields are included. No synthetic or fake columns.
+ * Defines clean, authoritative schemas for all Tally datasets.
+ * Supports dual profiles:
+ * 1. 'canonical'     : Clean Tally Connect standard schemas (15 datasets)
+ * 2. 'authoritative' : Exact schema specifications matching the 13 authoritative
+ *                      sample CSV templates (SampleCustomer.csv, SampleChartAccounts.csv, etc.)
+ * 
+ * Rules:
+ * - Field order and column counts are strictly enforced.
+ * - Headers are defined once here; never hardcoded elsewhere.
+ * - Missing/unavailable Tally fields are emitted as empty strings without fabrication.
  */
 
-export const DATASET_SCHEMAS = {
-  // --- 1. LEDGERS ---
+// ============================================================================
+// PROFILE 1: CANONICAL SCHEMAS (Standard Clean Tally Model)
+// ============================================================================
+export const CANONICAL_SCHEMAS = {
   ledgers: {
     id: 'ledgers',
     displayName: 'Ledgers',
@@ -30,7 +40,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 2. GROUPS ---
   groups: {
     id: 'groups',
     displayName: 'Groups',
@@ -44,7 +53,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 3. COST CENTERS ---
   cost_centers: {
     id: 'cost_centers',
     displayName: 'Cost Centers',
@@ -56,7 +64,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 4. CUSTOMERS ---
   customers: {
     id: 'customers',
     displayName: 'Customers',
@@ -83,7 +90,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 5. VENDORS ---
   vendors: {
     id: 'vendors',
     displayName: 'Vendors',
@@ -110,7 +116,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 6. STOCK ITEMS ---
   stock_items: {
     id: 'stock_items',
     displayName: 'Stock Items',
@@ -132,7 +137,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 7. STOCK GROUPS ---
   stock_groups: {
     id: 'stock_groups',
     displayName: 'Stock Groups',
@@ -144,7 +148,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 8. UNITS ---
   units: {
     id: 'units',
     displayName: 'Units',
@@ -157,7 +160,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 9. GODOWNS ---
   godowns: {
     id: 'godowns',
     displayName: 'Godowns',
@@ -170,7 +172,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 10. SALES ORDERS ---
   sales_orders: {
     id: 'sales_orders',
     displayName: 'Sales Orders',
@@ -192,7 +193,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 11. PURCHASE ORDERS ---
   purchase_orders: {
     id: 'purchase_orders',
     displayName: 'Purchase Orders',
@@ -214,7 +214,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 12. DELIVERY NOTES ---
   delivery_notes: {
     id: 'delivery_notes',
     displayName: 'Delivery Notes',
@@ -235,7 +234,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 13. RECEIPT NOTES ---
   receipt_notes: {
     id: 'receipt_notes',
     displayName: 'Receipt Notes',
@@ -256,7 +254,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 14. TRIAL BALANCE ---
   trial_balance: {
     id: 'trial_balance',
     displayName: 'Trial Balance',
@@ -273,7 +270,6 @@ export const DATASET_SCHEMAS = {
     ]
   },
 
-  // --- 15. SALES REGISTER ---
   sales_register: {
     id: 'sales_register',
     displayName: 'Sales Register',
@@ -292,6 +288,384 @@ export const DATASET_SCHEMAS = {
       'Total Invoice',
       'Narration'
     ]
+  },
+
+  purchase_register: {
+    id: 'purchase_register',
+    displayName: 'Purchase Register',
+    fileNamePrefix: 'purchase_register',
+    columns: [
+      'Invoice Number',
+      'Invoice Date',
+      'Vendor Name',
+      'GSTIN',
+      'Place of Supply',
+      'Item Name',
+      'Quantity',
+      'Rate',
+      'Amount',
+      'Godown',
+      'Total Invoice',
+      'Narration'
+    ]
+  }
+};
+
+// ============================================================================
+// PROFILE 2: AUTHORITATIVE SCHEMAS (13 Sample File Formats)
+// ============================================================================
+export const AUTHORITATIVE_SCHEMAS = {
+  // 1. Branch (3 columns) -> SampleBranch.csv
+  branch: {
+    id: 'branch',
+    displayName: 'Branch',
+    fileNamePrefix: 'SampleBranch',
+    columns: [
+      'Code',
+      'Name',
+      'GSTNo'
+    ]
+  },
+
+  // 2. Chart of Accounts (17 columns) -> SampleChartAccounts.csv
+  chart_of_accounts: {
+    id: 'chart_of_accounts',
+    displayName: 'Chart of Accounts',
+    fileNamePrefix: 'SampleChartAccounts',
+    columns: [
+      'Account Code',
+      'GL Name',
+      'Ledger Description',
+      'Parent',
+      'Grouping',
+      'Grouping for Financial Summary',
+      'Branch',
+      'Cost Center',
+      'Cost Classification',
+      'Cost Behaviour Description',
+      'SV Variable %',
+      'Inter-branch',
+      'Related Party',
+      'GST Applicable',
+      'TDS Applicable',
+      'Active',
+      'Remarks'
+    ]
+  },
+
+  // 3. Cost Center (3 columns) -> SampleCostCenter.csv
+  cost_centers: {
+    id: 'cost_centers',
+    displayName: 'Cost Center',
+    fileNamePrefix: 'SampleCostCenter',
+    columns: [
+      'Code',
+      'Name',
+      'Branch Code/Name'
+    ]
+  },
+
+  // 4. Customer Master (36 columns) -> SampleCustomer.csv
+  customers: {
+    id: 'customers',
+    displayName: 'Customer Master',
+    fileNamePrefix: 'SampleCustomer',
+    columns: [
+      'Customer Code',
+      'Customer Name',
+      'Customer Type',
+      'Account Status',
+      'Primary Contact Name',
+      'Primary Contact Email',
+      'Primary Contact Phone',
+      'Street Address',
+      'City',
+      'State/Province',
+      'Postal/ZIP Code',
+      'Country',
+      'GST Reg Type',
+      'Pan',
+      'Credit Days',
+      'Credit Limit',
+      'Payment Terms',
+      'Currency',
+      'Branch ID/Name',
+      'Sales Representative',
+      'GST Number',
+      'GST State Code',
+      'GST State Name',
+      'MainDistributor',
+      'MainDealer',
+      'MainAgent',
+      'SubDistributor',
+      'SubDealer',
+      'SubAgent',
+      'AccPartyBankName',
+      'AccPartyBankIFSCCode',
+      'AccPartyBankActNo',
+      'AccStartDate',
+      'AccEndDate',
+      'Active',
+      'Remarks'
+    ]
+  },
+
+  // 5. Inventory (17 columns) -> SampleInventory.csv
+  inventory: {
+    id: 'inventory',
+    displayName: 'Inventory Policies',
+    fileNamePrefix: 'SampleInventory',
+    columns: [
+      'Item/SKU ID',
+      'Item Name/Description',
+      'Item Category/Type',
+      'Item Sub-category',
+      'HSN',
+      'Brand',
+      'Manufacturer/Vendor Name',
+      'Unit of Measure',
+      'Reorder Point',
+      'Economic Order Quantity',
+      'Minimum Order Quantity',
+      'Maximum Stock Level',
+      'Safety Stock Level',
+      'Lead Time',
+      'Markup Percentage',
+      'Profit Margin',
+      'Status'
+    ]
+  },
+
+  // 6. Inventory Master / Stock Movement (20 columns) -> SampleInventoryMaster.csv
+  inventory_master: {
+    id: 'inventory_master',
+    displayName: 'Inventory Master',
+    fileNamePrefix: 'SampleInventoryMaster',
+    columns: [
+      'Code',
+      'Transaction Date',
+      'Transaction Type',
+      'Document No',
+      'Voucher Ref (ERP)',
+      'Godown Name/Code',
+      'Item Code/Name',
+      'Inward Qty',
+      'Outward Qty',
+      'Rate per Unit',
+      'Inward Value',
+      'Outward Value',
+      'Closing Qty',
+      'Closing Value',
+      'Batch No',
+      'Mfg Date',
+      'Expiry Date',
+      'Party Name',
+      'Cost Centre Name/Code',
+      'Remarks'
+    ]
+  },
+
+  // 7. Item Master (27 columns) -> SampleItemMaster.csv
+  stock_items: {
+    id: 'stock_items',
+    displayName: 'Item Master',
+    fileNamePrefix: 'SampleItemMaster',
+    columns: [
+      'Item/SKU ID',
+      'Item Name/Description',
+      'Month/Year',
+      'Item Category/Type',
+      'Item Sub-category',
+      'HSN',
+      'Brand',
+      'Manufacturer/Vendor Name',
+      'Unit of Measure',
+      'GST Rate %',
+      'GST Applicable',
+      'Costing Method',
+      'Standard Cost per Unit',
+      'MRP',
+      'Standard Selling Price',
+      'Reorder Level (Qty)',
+      'Min Stock Qty',
+      'Max Stock Qty',
+      'Opening Stock Qty',
+      'Opening Stock Rate',
+      'Opening Stock Value',
+      'Economic Order Quantity (EOQ)',
+      'Safety Stock Level',
+      'Lead Time',
+      'Markup Percentage',
+      'Profit Margin',
+      'Status'
+    ]
+  },
+
+  // 8. Purchase Register (32 columns) -> SamplePurchaseRegister.csv
+  purchase_register: {
+    id: 'purchase_register',
+    displayName: 'Purchase Register',
+    fileNamePrefix: 'SamplePurchaseRegister',
+    columns: [
+      'Code',
+      'Purchase Date',
+      'Invoice No',
+      'Invoice Date',
+      'Vendor Name/Code',
+      'GSTIN',
+      'Vendor Type',
+      'Purchase Type',
+      'Branch Name/Code',
+      'Cost Center Name/Code',
+      'Item Description',
+      'HSN',
+      'Qty',
+      'Rate',
+      'Discount',
+      'Tax Value',
+      'CGST',
+      'CGST Amount',
+      'SGST',
+      'SGST Amount',
+      'IGST',
+      'IGST Amount',
+      'Total Invoice',
+      'GRN No',
+      'PO Reference No',
+      'Payment Terms',
+      'Due Date',
+      'Payment Status',
+      'Payment Date',
+      'Mode Of Payment',
+      'Payment Voucher Ref',
+      'Remarks'
+    ]
+  },
+
+  // 9. Sales Register (32 columns) -> SampleSalesRegister.csv
+  sales_register: {
+    id: 'sales_register',
+    displayName: 'Sales Register',
+    fileNamePrefix: 'SampleSalesRegister',
+    columns: [
+      'Code',
+      'Sales Date',
+      'Invoice No',
+      'Invoice Date',
+      'Customer Name/Code',
+      'GSTIN',
+      'Customer Type',
+      'Sales Type',
+      'Branch Name/Code',
+      'Cost Center Name/Code',
+      'Godown Name/Code',
+      'Item Description',
+      'HSN',
+      'Qty',
+      'Rate',
+      'Discount',
+      'Tax Value',
+      'CGST',
+      'CGST Amount',
+      'SGST',
+      'SGST Amount',
+      'IGST',
+      'IGST Amount',
+      'Other Charges (₹)',
+      'Total Invoice',
+      'Place of Supply (State)',
+      'Payment Terms',
+      'Due Date',
+      'Payment Status',
+      'Payment Date',
+      'Mode Of Payment',
+      'Remarks'
+    ]
+  },
+
+  // 10. Sales Representative (3 columns) -> SampleSalesRepresentative.csv
+  sales_representative: {
+    id: 'sales_representative',
+    displayName: 'Sales Representative',
+    fileNamePrefix: 'SampleSalesRepresentative',
+    columns: [
+      'Code',
+      'Name',
+      'Mobile No'
+    ]
+  },
+
+  // 11. Trial Balance (9 columns) -> SampleTrialBalances.csv
+  trial_balance: {
+    id: 'trial_balance',
+    displayName: 'Trial Balance',
+    fileNamePrefix: 'SampleTrialBalances',
+    columns: [
+      'Month/Year',
+      'Branch',
+      'Particulars',
+      'Name',
+      'Opening',
+      'Debit',
+      'Credit',
+      'Closing',
+      'Dr/Cr'
+    ]
+  },
+
+  // 12. Vendor Master (33 columns) -> SampleVendor.csv
+  vendors: {
+    id: 'vendors',
+    displayName: 'Vendor Master',
+    fileNamePrefix: 'SampleVendor',
+    columns: [
+      'Vendor Code',
+      'Vendor Name',
+      'Vendor Type',
+      'Vendor Status',
+      'Primary Contact Name',
+      'Primary Contact Email',
+      'Primary Contact Phone',
+      'Street Address',
+      'City',
+      'State/Province',
+      'Postal/ZIP Code',
+      'Country',
+      'Credit Limit',
+      'Payment Terms',
+      'Currency',
+      'GST Number',
+      'GST State Code',
+      'GST State Name',
+      'MainDistributor',
+      'MainDealer',
+      'MainAgent',
+      'SubDistributor',
+      'SubDealer',
+      'SubAgent',
+      'AccPartyBankName',
+      'AccPartyBankIFSCCode',
+      'AccPartyBankActNo',
+      'AccStartDate',
+      'AccEndDate',
+      'Nature of vendor',
+      'TDS Category',
+      'TDS Section',
+      'PAN Number'
+    ]
+  },
+
+  // 13. Godown (4 columns) -> Samplegodown.csv
+  godowns: {
+    id: 'godowns',
+    displayName: 'Godown',
+    fileNamePrefix: 'Samplegodown',
+    columns: [
+      'Code',
+      'Name',
+      'Branch Code/Name',
+      'Active'
+    ]
   }
 };
 
@@ -299,20 +673,27 @@ export const DATASET_SCHEMAS = {
 const ALIAS_MAP = {
   customer: 'customers',
   customers: 'customers',
+  customer_master: 'customers',
   vendor: 'vendors',
   vendors: 'vendors',
+  vendor_master: 'vendors',
   ledger: 'ledgers',
   ledgers: 'ledgers',
-  chart_of_accounts: 'ledgers',
+  chart_of_accounts: 'chart_of_accounts',
+  chartaccounts: 'chart_of_accounts',
   group: 'groups',
   groups: 'groups',
   cost_centre: 'cost_centers',
   cost_centres: 'cost_centers',
   cost_center: 'cost_centers',
   cost_centers: 'cost_centers',
-  inventory: 'stock_items',
+  inventory: 'inventory',
+  inventory_policies: 'inventory',
+  inventory_master: 'inventory_master',
   stock_item: 'stock_items',
   stock_items: 'stock_items',
+  item_master: 'stock_items',
+  items: 'stock_items',
   stock_group: 'stock_groups',
   stock_groups: 'stock_groups',
   unit: 'units',
@@ -328,27 +709,81 @@ const ALIAS_MAP = {
   receipt_note: 'receipt_notes',
   receipt_notes: 'receipt_notes',
   trial_balance: 'trial_balance',
+  trialbalance: 'trial_balance',
+  trial_balances: 'trial_balance',
   sales_register: 'sales_register',
-  sales: 'sales_register'
+  sales: 'sales_register',
+  purchase_register: 'purchase_register',
+  purchases: 'purchase_register',
+  branch: 'branch',
+  branches: 'branch',
+  sales_representative: 'sales_representative',
+  sales_representatives: 'sales_representative',
+  sales_rep: 'sales_representative',
+  stock_movement: 'inventory_master'
 };
+
+// Default export profile in this environment
+let defaultExportProfile = 'canonical';
+
+export function setDefaultExportProfile(profile) {
+  if (profile === 'authoritative' || profile === 'target' || profile === 'sample') {
+    defaultExportProfile = 'authoritative';
+  } else {
+    defaultExportProfile = 'canonical';
+  }
+}
+
+export function getDefaultExportProfile() {
+  return defaultExportProfile;
+}
 
 /**
  * Normalizes input key to canonical dataset key
- * e.g. "CUSTOMER" -> "customers", "trial-balance" -> "trial_balance"
  */
 export function normalizeDatasetKey(key) {
   if (!key) return null;
   const canonical = String(key).trim().toLowerCase().replace(/[-\s]/g, '_');
-  return ALIAS_MAP[canonical] || (DATASET_SCHEMAS[canonical] ? canonical : null);
+  return ALIAS_MAP[canonical] || canonical;
 }
 
 /**
- * Returns the schema definition for a given dataset key
+ * Returns the schema definition for a given dataset key and profile
+ * @param {string} datasetKey
+ * @param {'canonical'|'authoritative'} [profile]
  */
-export function getSchema(datasetKey) {
+export function getSchema(datasetKey, profile = defaultExportProfile) {
   const normalized = normalizeDatasetKey(datasetKey);
-  if (!normalized || !DATASET_SCHEMAS[normalized]) {
-    throw new Error(`Unsupported dataset type: "${datasetKey}". Supported types: ${Object.keys(DATASET_SCHEMAS).join(', ')}`);
+  const isAuth = profile === 'authoritative' || profile === 'target' || profile === 'sample';
+
+  if (isAuth) {
+    if (AUTHORITATIVE_SCHEMAS[normalized]) {
+      return AUTHORITATIVE_SCHEMAS[normalized];
+    }
+    // Cross-alias fallbacks for authoritative profile
+    if (normalized === 'ledgers' && AUTHORITATIVE_SCHEMAS.chart_of_accounts) {
+      return AUTHORITATIVE_SCHEMAS.chart_of_accounts;
+    }
+    if (normalized === 'stock_items' && AUTHORITATIVE_SCHEMAS.stock_items) {
+      return AUTHORITATIVE_SCHEMAS.stock_items;
+    }
   }
-  return DATASET_SCHEMAS[normalized];
+
+  // Fallback to canonical profile
+  if (CANONICAL_SCHEMAS[normalized]) {
+    return CANONICAL_SCHEMAS[normalized];
+  }
+
+  if (normalized === 'chart_of_accounts' && CANONICAL_SCHEMAS.ledgers) {
+    return CANONICAL_SCHEMAS.ledgers;
+  }
+
+  if (AUTHORITATIVE_SCHEMAS[normalized]) {
+    return AUTHORITATIVE_SCHEMAS[normalized];
+  }
+
+  throw new Error(`Unsupported dataset type: "${datasetKey}". Supported types: ${Object.keys(CANONICAL_SCHEMAS).join(', ')}`);
 }
+
+// Backward-compatible export of default DATASET_SCHEMAS
+export const DATASET_SCHEMAS = CANONICAL_SCHEMAS;

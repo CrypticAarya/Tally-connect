@@ -1,6 +1,6 @@
 import { format } from 'fast-csv';
 import { PassThrough } from 'stream';
-import { getSchema } from '../engine/schemas.js';
+import { getSchema, getDefaultExportProfile } from '../engine/schemas.js';
 import { defaultExportStorage } from '../storage/localExportStorage.js';
 
 /**
@@ -23,22 +23,33 @@ export class CsvExporter {
    */
   static sanitizeValue(val) {
     if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val.trim();
+    if (typeof val === 'number') return isNaN(val) ? '' : String(val);
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+    if (val instanceof Date) return val.toISOString();
+    if (Array.isArray(val)) {
+      return val.map(v => CsvExporter.sanitizeValue(v)).filter(Boolean).join(', ');
+    }
     if (typeof val === 'object') {
-      // Avoid printing [object Object]
+      if (val['#text'] !== undefined && val['#text'] !== null) return String(val['#text']).trim();
+      if (val.value !== undefined && val.value !== null) return String(val.value).trim();
+      if (val['@_NAME'] !== undefined && val['@_NAME'] !== null) return String(val['@_NAME']).trim();
+      if (val.name !== undefined && val.name !== null) return String(val.name).trim();
       return '';
     }
-    return String(val);
+    return String(val).trim();
   }
 
   /**
    * Serializes flattened rows to CSV and persists to LocalExportStorage
    * @param {string} datasetType - canonical entity id or alias
    * @param {Array<Object>} rows - Flattened tabular records from Transformer
-   * @param {Object} [options={}] - Custom options (filename, storage instance, fromDate, toDate)
-   * @returns {Promise<{ filename: string, filePath: string, sizeBytes: number, rowCount: number, createdAt: Date }>}
+   * @param {Object} [options={}] - Custom options (filename, storage instance, fromDate, toDate, profile)
+   * @returns {Promise<{ filename: string, filePath: string, sizeBytes: number, rowCount: number, createdAt: Date, columns: Array<string> }>}
    */
   static async exportToStorage(datasetType, rows, options = {}) {
-    const schema = getSchema(datasetType);
+    const profile = options.profile || getDefaultExportProfile();
+    const schema = getSchema(datasetType, profile);
     const storage = options.storage || defaultExportStorage;
 
     let filename = options.filename;
@@ -51,26 +62,35 @@ export class CsvExporter {
       }
     }
 
-    // Initialize fast-csv stream with UTF-8, strict headers, and RFC 4180 escaping
-    const csvStream = format({
-      headers: schema.columns,
-      writeHeaders: true,
-      quoteColumns: true, // Quote columns to properly escape commas and quotes
-      quoteHeaders: false
-    });
-
     const passThrough = new PassThrough({ encoding: 'utf-8' });
-    csvStream.pipe(passThrough);
 
-    // Stream write rows in exact column order with sanitized values
-    for (const row of rows) {
-      const orderedRow = {};
-      for (const col of schema.columns) {
-        orderedRow[col] = this.sanitizeValue(row[col]);
+    // Prepend UTF-8 BOM for seamless Microsoft Excel compatibility on Windows
+    passThrough.write('\uFEFF');
+
+    if (rows.length === 0) {
+      // Guarantee valid RFC 4180 CSV with header row for 0-record exports (never a 0 KB / 0 byte corrupt file)
+      passThrough.write(schema.columns.join(',') + '\r\n');
+      passThrough.end();
+    } else {
+      // Initialize fast-csv stream with strict headers, quoting, and RFC 4180 escaping
+      const csvStream = format({
+        headers: schema.columns,
+        writeHeaders: true,
+        quoteColumns: true, // Quote columns to properly escape commas, newlines and quotes
+        quoteHeaders: false
+      });
+      csvStream.pipe(passThrough);
+
+      // Stream write rows in exact column order with sanitized values
+      for (const row of rows) {
+        const orderedRow = {};
+        for (const col of schema.columns) {
+          orderedRow[col] = this.sanitizeValue(row[col]);
+        }
+        csvStream.write(orderedRow);
       }
-      csvStream.write(orderedRow);
+      csvStream.end();
     }
-    csvStream.end();
 
     // Save directly to disk via stream
     const storageRecord = await storage.saveExport(filename, passThrough, {

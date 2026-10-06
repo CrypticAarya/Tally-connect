@@ -9,6 +9,72 @@ function ensureArray(val) {
 }
 
 /**
+ * Extracts clean string text from strings, numbers, or XML objects with text/attribute properties
+ */
+export function extractTextValue(val) {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'string') return val.trim();
+  if (typeof val === 'number') return String(val);
+  if (typeof val === 'object') {
+    if (val['#text'] !== undefined && val['#text'] !== null) {
+      return String(val['#text']).trim();
+    }
+    if (val.value !== undefined && val.value !== null) {
+      return String(val.value).trim();
+    }
+    if (val['@_NAME'] !== undefined && val['@_NAME'] !== null) {
+      return String(val['@_NAME']).trim();
+    }
+    if (val.NAME !== undefined && val.NAME !== null) {
+      return extractTextValue(val.NAME);
+    }
+    if (Array.isArray(val) && val.length > 0) {
+      return extractTextValue(val[0]);
+    }
+    return '';
+  }
+  return String(val).trim();
+}
+
+/**
+ * Calculates correct financial year bounds from Tally STARTINGFROM and ENDINGAT
+ */
+export function computeFinancialYear(startingFromRaw, endingAtRaw) {
+  const from = formatTallyDateToIso(startingFromRaw);
+  const to = formatTallyDateToIso(endingAtRaw);
+
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    // If endingAt is valid and strictly after startingFrom, use it
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to) && to > from) {
+      return { from, to };
+    }
+    // Calculate 1 full financial year (12 months minus 1 day)
+    const [y, m, d] = from.split('-').map(Number);
+    const endDate = new Date(Date.UTC(y + 1, m - 1, d - 1));
+    const toY = endDate.getUTCFullYear();
+    const toM = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+    const toD = String(endDate.getUTCDate()).padStart(2, '0');
+    return { from, to: `${toY}-${toM}-${toD}` };
+  }
+
+  // Fallback to current financial year based on today's date
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-12
+  if (currentMonth >= 4) {
+    return {
+      from: `${currentYear}-04-01`,
+      to: `${currentYear + 1}-03-31`
+    };
+  } else {
+    return {
+      from: `${currentYear - 1}-04-01`,
+      to: `${currentYear}-03-31`
+    };
+  }
+}
+
+/**
  * Parses numeric amounts from Tally strings (e.g. "-76000.00" -> 76000)
  */
 function parseTallyAmount(amountStr) {
@@ -113,7 +179,36 @@ export class TallyXmlParser {
     if (!xmlString || typeof xmlString !== 'string') {
       throw new Error('TallyXmlParser received empty or non-string XML input');
     }
-    return this.parser.parse(xmlString);
+    const parsed = this.parser.parse(xmlString);
+
+    // Inspect parsed XML for Tally error responses
+    const header = parsed?.ENVELOPE?.HEADER;
+    const status = header?.STATUS;
+    if (status !== undefined && status !== null && String(status).trim() === '0') {
+      const errorMsg = header?.ERROR || parsed?.ENVELOPE?.BODY?.DATA?.LINEERROR || parsed?.RESPONSE || 'Tally returned failure status (STATUS=0)';
+      const err = new Error(typeof errorMsg === 'object' ? extractTextValue(errorMsg) : String(errorMsg));
+      err.code = 'TALLY_ERROR';
+      throw err;
+    }
+
+    const lineError = parsed?.ENVELOPE?.BODY?.DATA?.LINEERROR || parsed?.ENVELOPE?.LINEERROR || parsed?.LINEERROR;
+    if (lineError) {
+      const errText = typeof lineError === 'object' ? extractTextValue(lineError) : String(lineError);
+      const err = new Error(`Tally reported an error: ${errText}`);
+      err.code = 'TALLY_LINE_ERROR';
+      throw err;
+    }
+
+    if (parsed.RESPONSE && !parsed.ENVELOPE) {
+      const respText = typeof parsed.RESPONSE === 'object' ? extractTextValue(parsed.RESPONSE) : String(parsed.RESPONSE);
+      if (/error|failed|invalid/i.test(respText)) {
+        const err = new Error(`Tally response error: ${respText}`);
+        err.code = 'TALLY_RESPONSE_ERROR';
+        throw err;
+      }
+    }
+
+    return parsed;
   }
 
   normalizeCompany(xmlString) {
@@ -128,18 +223,33 @@ export class TallyXmlParser {
       throw err;
     }
 
-    const companyName = companyNode.NAME || companyNode['@_NAME'];
+    let companyName = '';
+    if (companyNode['@_NAME']) {
+      companyName = extractTextValue(companyNode['@_NAME']);
+    }
+    if (!companyName && companyNode.NAME) {
+      companyName = extractTextValue(companyNode.NAME);
+    }
+    if (!companyName) {
+      companyName = extractTextValue(companyNode);
+    }
+
     if (!companyName || companyName === 'No Company Loaded') {
       const err = new Error("We couldn't identify the active Tally company. Please open a company in TallyPrime and try again.");
       err.code = 'NO_ACTIVE_COMPANY';
       throw err;
     }
 
+    const { from: financialYearFrom, to: financialYearTo } = computeFinancialYear(
+      companyNode.STARTINGFROM,
+      companyNode.ENDINGAT
+    );
+
     return {
       name: companyName,
-      guid: companyNode.GUID || '',
-      financialYearFrom: formatTallyDateToIso(companyNode.STARTINGFROM) || '',
-      financialYearTo: formatTallyDateToIso(companyNode.ENDINGAT) || '',
+      guid: extractTextValue(companyNode.GUID) || '',
+      financialYearFrom,
+      financialYearTo,
       tallyVersion: 'TallyPrime',
       port: 9000
     };
@@ -151,21 +261,23 @@ export class TallyXmlParser {
     const ledgerNodes = extractEntityNodes(data, 'LEDGER');
 
     return ledgerNodes.map((node) => {
-      const name = node.NAME || node['@_NAME'] || '';
-      const guid = node.GUID || '';
-      const code = node.GUID ? node.GUID.slice(0, 10) : '';
+      const name = extractTextValue(node.NAME || node['@_NAME']);
+      const guid = extractTextValue(node.GUID);
+      const code = guid ? guid.slice(0, 10) : '';
 
       const addressLines = [];
       if (node['ADDRESS.LIST']) {
         const addrNode = ensureArray(node['ADDRESS.LIST'])[0];
         if (addrNode && addrNode.ADDRESS) {
           ensureArray(addrNode.ADDRESS).forEach(line => {
-            if (line && typeof line === 'string') addressLines.push(line.trim());
+            const cleanLine = extractTextValue(line);
+            if (cleanLine) addressLines.push(cleanLine);
           });
         }
       } else if (node.ADDRESS) {
         ensureArray(node.ADDRESS).forEach(line => {
-          if (line && typeof line === 'string') addressLines.push(line.trim());
+          const cleanLine = extractTextValue(line);
+          if (cleanLine) addressLines.push(cleanLine);
         });
       }
 
@@ -174,48 +286,48 @@ export class TallyXmlParser {
         const bankNode = ensureArray(node['BANKDETAILS.LIST'])[0];
         if (bankNode) {
           bank = {
-            bankName: bankNode.BANKNAME || '',
-            ifscCode: bankNode.IFSCCODE || '',
-            accountNumber: bankNode.ACCOUNTNUMBER || ''
+            bankName: extractTextValue(bankNode.BANKNAME),
+            ifscCode: extractTextValue(bankNode.IFSCCODE),
+            accountNumber: extractTextValue(bankNode.ACCOUNTNUMBER)
           };
         }
       }
 
-      const gstin = node.PARTYGSTIN || '';
-      const pan = node.PANNUMBER || extractPanFromGstin(gstin);
-      const stateName = node.STATENAME || '';
+      const gstin = extractTextValue(node.PARTYGSTIN);
+      const pan = extractTextValue(node.PANNUMBER) || extractPanFromGstin(gstin);
+      const stateName = extractTextValue(node.STATENAME);
       const gstStateCode = gstin.length >= 2 ? gstin.slice(0, 2) : '';
 
       return {
         guid,
         name,
         code,
-        parent: node.PARENT || '',
-        customerType: node.CUSTOMERTYPE || '',
+        parent: extractTextValue(node.PARENT),
+        customerType: extractTextValue(node.CUSTOMERTYPE),
         accountStatus: 'Active',
         contact: {
-          name: node.LEDGERCONTACT || '',
-          email: node.EMAIL || '',
-          phone: node.LEDGERPHONE || ''
+          name: extractTextValue(node.LEDGERCONTACT),
+          email: extractTextValue(node.EMAIL),
+          phone: extractTextValue(node.LEDGERPHONE)
         },
         mailingDetails: {
-          addressLines: addressLines.length ? addressLines : (node.MAILINGNAME ? [node.MAILINGNAME] : []),
+          addressLines: addressLines.length ? addressLines : (node.MAILINGNAME ? [extractTextValue(node.MAILINGNAME)] : []),
           city: stateName,
           state: stateName,
-          postalCode: node.PINCODE || '',
-          country: node.COUNTRYNAME || ''
+          postalCode: extractTextValue(node.PINCODE),
+          country: extractTextValue(node.COUNTRYNAME)
         },
         statutory: {
-          gstRegType: node.GSTREGISTRATIONTYPE || '',
+          gstRegType: extractTextValue(node.GSTREGISTRATIONTYPE),
           gstin,
           gstStateCode,
           gstStateName: stateName,
           pan
         },
         creditPolicy: {
-          creditDays: node.BILLCREDITPERIOD ? (parseInt(node.BILLCREDITPERIOD, 10) || 0) : 0,
-          creditLimit: parseFloat(node.CREDITLIMIT || '0') || 0,
-          paymentTerms: node.BILLCREDITPERIOD || '',
+          creditDays: node.BILLCREDITPERIOD ? (parseInt(extractTextValue(node.BILLCREDITPERIOD), 10) || 0) : 0,
+          creditLimit: parseFloat(extractTextValue(node.CREDITLIMIT) || '0') || 0,
+          paymentTerms: extractTextValue(node.BILLCREDITPERIOD),
           currency: 'INR'
         },
         banking: {
@@ -236,21 +348,23 @@ export class TallyXmlParser {
     const ledgerNodes = extractEntityNodes(data, 'LEDGER');
 
     return ledgerNodes.map((node) => {
-      const name = node.NAME || node['@_NAME'] || '';
-      const guid = node.GUID || '';
-      const code = node.GUID ? node.GUID.slice(0, 10) : '';
+      const name = extractTextValue(node.NAME || node['@_NAME']);
+      const guid = extractTextValue(node.GUID);
+      const code = guid ? guid.slice(0, 10) : '';
 
       const addressLines = [];
       if (node['ADDRESS.LIST']) {
         const addrNode = ensureArray(node['ADDRESS.LIST'])[0];
         if (addrNode && addrNode.ADDRESS) {
           ensureArray(addrNode.ADDRESS).forEach(line => {
-            if (line && typeof line === 'string') addressLines.push(line.trim());
+            const cleanLine = extractTextValue(line);
+            if (cleanLine) addressLines.push(cleanLine);
           });
         }
       } else if (node.ADDRESS) {
         ensureArray(node.ADDRESS).forEach(line => {
-          if (line && typeof line === 'string') addressLines.push(line.trim());
+          const cleanLine = extractTextValue(line);
+          if (cleanLine) addressLines.push(cleanLine);
         });
       }
 
@@ -259,35 +373,35 @@ export class TallyXmlParser {
         const bankNode = ensureArray(node['BANKDETAILS.LIST'])[0];
         if (bankNode) {
           bank = {
-            bankName: bankNode.BANKNAME || '',
-            ifscCode: bankNode.IFSCCODE || '',
-            accountNumber: bankNode.ACCOUNTNUMBER || ''
+            bankName: extractTextValue(bankNode.BANKNAME),
+            ifscCode: extractTextValue(bankNode.IFSCCODE),
+            accountNumber: extractTextValue(bankNode.ACCOUNTNUMBER)
           };
         }
       }
 
-      const gstin = node.PARTYGSTIN || '';
-      const pan = node.PANNUMBER || extractPanFromGstin(gstin);
-      const stateName = node.STATENAME || '';
+      const gstin = extractTextValue(node.PARTYGSTIN);
+      const pan = extractTextValue(node.PANNUMBER) || extractPanFromGstin(gstin);
+      const stateName = extractTextValue(node.STATENAME);
 
       return {
         guid,
         name,
         code,
-        parent: node.PARENT || '',
-        vendorType: node.VENDORTYPE || '',
+        parent: extractTextValue(node.PARENT),
+        vendorType: extractTextValue(node.VENDORTYPE),
         status: 'Active',
         contact: {
-          name: node.LEDGERCONTACT || '',
-          email: node.EMAIL || '',
-          phone: node.LEDGERPHONE || ''
+          name: extractTextValue(node.LEDGERCONTACT),
+          email: extractTextValue(node.EMAIL),
+          phone: extractTextValue(node.LEDGERPHONE)
         },
         mailingDetails: {
-          addressLines: addressLines.length ? addressLines : (node.MAILINGNAME ? [node.MAILINGNAME] : []),
+          addressLines: addressLines.length ? addressLines : (node.MAILINGNAME ? [extractTextValue(node.MAILINGNAME)] : []),
           city: stateName,
           state: stateName,
-          postalCode: node.PINCODE || '',
-          country: node.COUNTRYNAME || ''
+          postalCode: extractTextValue(node.PINCODE),
+          country: extractTextValue(node.COUNTRYNAME)
         },
         statutory: {
           gstin,
@@ -295,8 +409,8 @@ export class TallyXmlParser {
           stateName
         },
         creditPolicy: {
-          creditDays: node.BILLCREDITPERIOD ? (parseInt(node.BILLCREDITPERIOD, 10) || 0) : 0,
-          creditLimit: parseFloat(node.CREDITLIMIT || '0') || 0
+          creditDays: node.BILLCREDITPERIOD ? (parseInt(extractTextValue(node.BILLCREDITPERIOD), 10) || 0) : 0,
+          creditLimit: parseFloat(extractTextValue(node.CREDITLIMIT) || '0') || 0
         },
         banking: {
           bankName: bank.bankName || '',
@@ -316,9 +430,9 @@ export class TallyXmlParser {
     const groupNodes = extractEntityNodes(data, 'GROUP');
 
     return groupNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      parent: node.PARENT || '',
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      parent: extractTextValue(node.PARENT),
       isAddable: node.ISADDABLE === 'Yes',
       isSubLedger: node.ISSUBLEDGER === 'Yes',
       isCalculate: node.BASICGROUPISCALCULATE === 'Yes'
@@ -331,29 +445,29 @@ export class TallyXmlParser {
     const ledgerNodes = extractEntityNodes(data, 'LEDGER');
 
     return ledgerNodes.map((node) => {
-      const name = node.NAME || node['@_NAME'] || '';
-      const parent = node.PARENT || '';
-      const gstin = node.PARTYGSTIN || '';
+      const name = extractTextValue(node.NAME || node['@_NAME']);
+      const parent = extractTextValue(node.PARENT);
+      const gstin = extractTextValue(node.PARTYGSTIN);
 
       return {
-        guid: node.GUID || '',
+        guid: extractTextValue(node.GUID),
         name,
         parent,
-        description: node.DESCRIPTION || '',
+        description: extractTextValue(node.DESCRIPTION),
         openingBalance: parseTallyAmount(node.OPENINGBALANCE),
         closingBalance: parseTallyAmount(node.CLOSINGBALANCE),
-        gstApplicable: node.GSTAPPLICABLE || '',
+        gstApplicable: extractTextValue(node.GSTAPPLICABLE),
         isCostCentresOn: node.ISCOSTCENTRESON === 'Yes',
-        mailingName: node.MAILINGNAME || name,
-        city: node.STATENAME || '',
-        state: node.STATENAME || '',
-        pincode: node.PINCODE || '',
-        country: node.COUNTRYNAME || '',
+        mailingName: extractTextValue(node.MAILINGNAME) || name,
+        city: extractTextValue(node.STATENAME),
+        state: extractTextValue(node.STATENAME),
+        pincode: extractTextValue(node.PINCODE),
+        country: extractTextValue(node.COUNTRYNAME),
         gstin,
-        pan: node.PANNUMBER || extractPanFromGstin(gstin),
-        phone: node.LEDGERPHONE || '',
-        email: node.EMAIL || '',
-        narration: node.NARRATION || ''
+        pan: extractTextValue(node.PANNUMBER) || extractPanFromGstin(gstin),
+        phone: extractTextValue(node.LEDGERPHONE),
+        email: extractTextValue(node.EMAIL),
+        narration: extractTextValue(node.NARRATION)
       };
     });
   }
@@ -368,10 +482,10 @@ export class TallyXmlParser {
     const ccNodes = extractEntityNodes(data, 'COSTCENTRE');
 
     return ccNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      parent: node.PARENT || '',
-      category: node.CATEGORY || ''
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      parent: extractTextValue(node.PARENT),
+      category: extractTextValue(node.CATEGORY)
     }));
   }
 
@@ -381,20 +495,24 @@ export class TallyXmlParser {
     const itemNodes = extractEntityNodes(data, 'STOCKITEM');
 
     return itemNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      parent: node.PARENT || '',
-      uom: node.BASEUNITS || '',
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      parent: extractTextValue(node.PARENT),
+      uom: extractTextValue(node.BASEUNITS),
       openingQuantity: parseTallyQty(node.OPENINGBALANCE),
       openingRate: parseTallyRate(node.OPENINGRATE),
       openingValue: parseTallyAmount(node.OPENINGVALUE),
       closingQuantity: parseTallyQty(node.CLOSINGBALANCE),
       closingRate: parseTallyRate(node.CLOSINGRATE),
       closingValue: parseTallyAmount(node.CLOSINGVALUE),
-      gstApplicable: node.GSTAPPLICABLE || '',
-      gstRate: node.GSTRATE ? parseFloat(node.GSTRATE) : 0,
-      hsnCode: node.HSNCODE || '',
-      description: node.DESCRIPTION || ''
+      gstApplicable: extractTextValue(node.GSTAPPLICABLE),
+      gstRate: node.GSTRATE ? parseFloat(extractTextValue(node.GSTRATE)) : 0,
+      hsnCode: extractTextValue(node.HSNCODE),
+      description: extractTextValue(node.DESCRIPTION),
+      costingMethod: extractTextValue(node.COSTINGMETHOD),
+      reorderLevel: parseTallyQty(node.REORDERBASE),
+      minStockQty: parseTallyQty(node.MINORDERQTY),
+      maxStockQty: parseTallyQty(node.MAXSTOCKLEVEL)
     }));
   }
 
@@ -404,9 +522,9 @@ export class TallyXmlParser {
     const grpNodes = extractEntityNodes(data, 'STOCKGROUP');
 
     return grpNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      parent: node.PARENT || '',
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      parent: extractTextValue(node.PARENT),
       isAddable: node.ISADDABLE === 'Yes'
     }));
   }
@@ -417,10 +535,10 @@ export class TallyXmlParser {
     const unitNodes = extractEntityNodes(data, 'UNIT');
 
     return unitNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      originalName: node.ORIGINALNAME || node.NAME || '',
-      decimalPlaces: parseInt(node.DECIMALPLACES || '0', 10) || 0,
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      originalName: extractTextValue(node.ORIGINALNAME || node.NAME),
+      decimalPlaces: parseInt(extractTextValue(node.DECIMALPLACES) || '0', 10) || 0,
       isGstExcluded: node.ISGSTEXCLUDED === 'Yes'
     }));
   }
@@ -431,11 +549,11 @@ export class TallyXmlParser {
     const gNodes = extractEntityNodes(data, 'GODOWN');
 
     return gNodes.map((node) => ({
-      guid: node.GUID || '',
-      name: node.NAME || node['@_NAME'] || '',
-      parent: node.PARENT || '',
-      address: node.ADDRESS || '',
-      pincode: node.PINCODE || ''
+      guid: extractTextValue(node.GUID),
+      name: extractTextValue(node.NAME || node['@_NAME']),
+      parent: extractTextValue(node.PARENT),
+      address: extractTextValue(node.ADDRESS),
+      pincode: extractTextValue(node.PINCODE)
     }));
   }
 
@@ -445,36 +563,36 @@ export class TallyXmlParser {
     const voucherNodes = extractEntityNodes(data, 'VOUCHER');
 
     return voucherNodes.map((vch) => {
-      const voucherNumber = vch.VOUCHERNUMBER || '';
+      const voucherNumber = extractTextValue(vch.VOUCHERNUMBER);
       const voucherDate = formatTallyDateToIso(vch.DATE) || '';
       const dueDate = formatTallyDateToIso(vch.BASICDUEDATE) || voucherDate;
-      const partyName = vch.PARTYLEDGERNAME || '';
-      const partyGstin = vch.PARTYGSTIN || '';
-      const placeOfSupply = vch.PLACEOFSUPPLY || '';
-      const narration = vch.NARRATION || '';
+      const partyName = extractTextValue(vch.PARTYLEDGERNAME || vch.PARTYNAME);
+      const partyGstin = extractTextValue(vch.PARTYGSTIN);
+      const placeOfSupply = extractTextValue(vch.PLACEOFSUPPLY);
+      const narration = extractTextValue(vch.NARRATION);
 
       const invNodes = ensureArray(vch['ALLINVENTORYENTRIES.LIST']);
       const items = invNodes.map((item) => {
-        const itemName = item.STOCKITEMNAME || '';
+        const itemName = extractTextValue(item.STOCKITEMNAME);
         const qty = parseTallyQty(item.BILLEDQTY);
         const rate = parseTallyRate(item.RATE);
         const amount = parseTallyAmount(item.AMOUNT);
-        const godown = item.GODOWNNAME || '';
+        const godown = extractTextValue(item.GODOWNNAME);
         return {
           itemName,
           quantity: qty,
           rate,
           amount,
           godown,
-          unit: item.BASEUNITS || '',
-          hsnCode: item.HSNCODE || ''
+          unit: extractTextValue(item.BASEUNITS),
+          hsnCode: extractTextValue(item.HSNCODE)
         };
       });
 
       const ledgerNodes = ensureArray(vch['LEDGERENTRIES.LIST']);
       let calculatedTotal = 0;
       const ledgerEntries = ledgerNodes.map(lNode => {
-        const ledgerName = lNode.LEDGERNAME || '';
+        const ledgerName = extractTextValue(lNode.LEDGERNAME);
         const amount = parseTallyAmount(lNode.AMOUNT);
         const isDeemedPositive = (lNode.ISDEEMEDPOSITIVE === 'Yes');
         if (ledgerName === partyName) {
@@ -491,13 +609,13 @@ export class TallyXmlParser {
       }
 
       return {
-        id: vch.GUID || '',
-        guid: vch.GUID || '',
+        id: extractTextValue(vch.GUID),
+        guid: extractTextValue(vch.GUID),
         orderNumber: voucherNumber,
         voucherNumber,
         date: voucherDate,
         dueDate,
-        voucherType: vch.VOUCHERTYPENAME || defaultType,
+        voucherType: extractTextValue(vch.VOUCHERTYPENAME) || defaultType,
         partyName,
         partyLedgerName: partyName,
         partyGstin,
@@ -530,6 +648,10 @@ export class TallyXmlParser {
 
   normalizeSalesVouchers(xmlString) {
     return this._parseVouchers(xmlString, 'Sales');
+  }
+
+  normalizePurchaseVouchers(xmlString) {
+    return this._parseVouchers(xmlString, 'Purchase');
   }
 
   normalizeTrialBalance(xmlString, requestedOptions = {}) {
@@ -583,15 +705,15 @@ export class TallyXmlParser {
 
     if (ledgerNodes.length > 0) {
       const results = ledgerNodes.map((node) => {
-        const name = node.NAME || node['@_NAME'] || '';
-        const parent = node.PARENT || '';
+        const name = extractTextValue(node.NAME || node['@_NAME']);
+        const parent = extractTextValue(node.PARENT);
         const opening = parseTallyAmount(node.OPENINGBALANCE);
         const debit = parseTallyAmount(node.DEBITTOTALS);
         const credit = parseTallyAmount(node.CREDITTOTALS);
         const closing = parseTallyAmount(node.CLOSINGBALANCE);
 
         return {
-          guid: node.GUID || '',
+          guid: extractTextValue(node.GUID),
           name,
           parent,
           openingBalance: opening,
@@ -626,15 +748,13 @@ export class TallyXmlParser {
     if (displayRecords.length > 0) {
       const results = displayRecords.map(node => {
         let name = '';
-        if (typeof node.DSPACCNAME === 'string') {
-          name = node.DSPACCNAME;
-        } else if (node.DSPACCNAME?.DSPDISPNAME) {
-          name = String(node.DSPACCNAME.DSPDISPNAME);
+        if (node.DSPACCNAME) {
+          name = extractTextValue(node.DSPACCNAME?.DSPDISPNAME || node.DSPACCNAME);
         } else if (node.DSPDISPNAME) {
-          name = String(node.DSPDISPNAME);
+          name = extractTextValue(node.DSPDISPNAME);
         }
 
-        const parent = node.DSPGROUPNAME || node.DSPPARENTNAME || '';
+        const parent = extractTextValue(node.DSPGROUPNAME || node.DSPPARENTNAME);
         const opDr = parseTallyAmount(node.DSPOPDRBAL || node.DSPDIFFBAL);
         const opCr = parseTallyAmount(node.DSPOPCRBAL);
         const dr = parseTallyAmount(node.DSPDRAMT || node.DSPDRBAL);

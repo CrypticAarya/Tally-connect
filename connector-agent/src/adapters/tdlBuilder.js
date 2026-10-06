@@ -285,7 +285,7 @@ export class TdlBuilder {
             <FETCH>
               GUID, NAME, PARENT, BASEUNITS, OPENINGBALANCE, OPENINGRATE, OPENINGVALUE,
               CLOSINGBALANCE, CLOSINGRATE, CLOSINGVALUE, GSTAPPLICABLE, GSTTYPEOFSUPPLY,
-              HSNCODE, DESCRIPTION
+              HSNCODE, DESCRIPTION, COSTINGMETHOD, REORDERBASE, MINORDERQTY, MAXSTOCKLEVEL, GSTRATE
             </FETCH>
           </COLLECTION>
         </TDLMESSAGE>
@@ -593,6 +593,50 @@ export class TdlBuilder {
           </COLLECTION>
           <SYSTEM TYPE="Formulae" NAME="IsSalesVch">
             $$IsSales:$VoucherTypeName
+          </SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Purchase Register vouchers with date-range filters
+   * and hierarchical inventory + ledger line items
+   */
+  static buildPurchaseRegisterRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2027-03-31');
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>PurchaseRegisterVouchersCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="PurchaseRegisterVouchersCollection">
+            <TYPE>Voucher</TYPE>
+            <FILTER>IsPurchaseVch</FILTER>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, PARTYGSTIN, PLACEOFSUPPLY, NARRATION,
+              BASICDUEDATE, ALLINVENTORYENTRIES.*, LEDGERENTRIES.*
+            </FETCH>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="IsPurchaseVch">
+            $$IsPurchase:$VoucherTypeName
           </SYSTEM>
         </TDLMESSAGE>
       </TDL>

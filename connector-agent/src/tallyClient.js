@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { TdlBuilder } from './adapters/tdlBuilder.js';
+import { extractTextValue } from './adapters/xmlParser.js';
 
 export class TallyClient {
   constructor(options = {}) {
@@ -50,11 +51,16 @@ export class TallyClient {
       const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
       const companyNode = collection?.COMPANY;
 
+      let rawNode = Array.isArray(companyNode) && companyNode.length > 0 ? companyNode[0] : companyNode;
       let companyName = null;
-      if (Array.isArray(companyNode) && companyNode.length > 0) {
-        companyName = companyNode[0].NAME || companyNode[0]['@_NAME'] || null;
-      } else if (companyNode) {
-        companyName = companyNode.NAME || companyNode['@_NAME'] || null;
+      if (rawNode) {
+        if (rawNode['@_NAME']) {
+          companyName = extractTextValue(rawNode['@_NAME']);
+        } else if (rawNode.NAME) {
+          companyName = extractTextValue(rawNode.NAME);
+        } else {
+          companyName = extractTextValue(rawNode);
+        }
       }
 
       if (!companyName || companyName === 'No Company Loaded') {

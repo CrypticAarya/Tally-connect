@@ -16,7 +16,7 @@ import { CloudClient } from './cloudClient.js';
 import { windowsService } from './windowsService.js';
 import { logger } from './logger.js';
 import { DEFAULT_PUBLIC_CLOUD_URL } from './cloudConfig.js';
-import { getAllEntities, getEntityById } from './extraction/entityRegistry.js';
+import { getAllEntities, getEntityById, isDateFilteredEntity } from './extraction/entityRegistry.js';
 import { ExtractionService } from './extraction/extractionService.js';
 import { InteractiveExporter } from './extraction/interactiveExporter.js';
 import { LocalExportStorage, getDefaultExportDirectory } from './storage/localExportStorage.js';
@@ -73,7 +73,8 @@ Mode 1: Local Tally Extraction (Default, No Activation Required):
   --from-date <YYYY-MM-DD>    Start date for reports (default: 2026-04-01)
   --to-date <YYYY-MM-DD>      End date for reports (default: 2026-09-30)
   --out-dir <directory>       Custom export directory (default: %APPDATA%\\TallyConnect\\exports)
-  --tally-port <port>         TallyPrime XML port (default: 9000)
+  --tally-host <host>         TallyPrime host address (default: 127.0.0.1 or env TALLY_HOST)
+  --tally-port <port>         TallyPrime XML port (default: 9000 or env TALLY_PORT)
 
 Diagnostics & Status:
   --status                    Display local TallyPrime and Cloud diagnostics
@@ -145,7 +146,8 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     const fromDateIdx = args.findIndex(a => a === '--from-date');
     const toDateIdx = args.findIndex(a => a === '--to-date');
     const outDirIdx = args.findIndex(a => a === '--out-dir');
-    const tallyPortIdx = args.findIndex(a => a === '--tally-port');
+    const tallyHostIdx = args.findIndex(a => a === '--tally-host' || a === '--host');
+    const tallyPortIdx = args.findIndex(a => a === '--tally-port' || a === '--port');
 
     const params = {
       fromDate: fromDateIdx !== -1 ? args[fromDateIdx + 1] : '2026-04-01',
@@ -153,10 +155,12 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     };
 
     const outDir = outDirIdx !== -1 ? path.resolve(args[outDirIdx + 1]) : null;
-    const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : 9000;
+    const tallyHost = tallyHostIdx !== -1 ? args[tallyHostIdx + 1] : (process.env.TALLY_HOST || '127.0.0.1');
+    const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : Number(process.env.TALLY_PORT || 9000);
 
     const exportStorage = outDir ? new LocalExportStorage({ baseDir: outDir }) : undefined;
     const extractionService = new ExtractionService({
+      host: tallyHost,
       port: tallyPort,
       exportStorage
     });
@@ -164,7 +168,7 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     const entityList = rawEntities.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
     try {
-      console.log(`\nConnecting to TallyPrime port ${tallyPort}...`);
+      console.log(`\nConnecting to TallyPrime at ${tallyHost}:${tallyPort}...`);
       const companyInfo = await extractionService.detectActiveCompany();
       console.log(`✔ Active Company: "${companyInfo.companyName}"`);
       params.companyName = companyInfo.companyName;
@@ -175,7 +179,11 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
 
       for (const id of entityList) {
         process.stdout.write(`  Processing ${id}... `);
-        const res = await extractionService.extractEntity(id, params);
+        const entityParams = {
+          companyName: companyInfo.companyName,
+          ...(isDateFilteredEntity(id) ? { fromDate: params.fromDate, toDate: params.toDate } : {})
+        };
+        const res = await extractionService.extractEntity(id, entityParams);
         results.push(res);
         totalRecords += res.recordCount;
         console.log(`✔ ${res.recordCount} records -> ${res.filename}`);
@@ -254,7 +262,12 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
 
   // 7. DEFAULT WORKFLOW: INTERACTIVE TALLY -> CSV EXPORTER
   // (Double-clicked or run from console without flags)
-  const interactiveExporter = new InteractiveExporter();
+  const tallyHostIdx = args.findIndex(a => a === '--tally-host' || a === '--host');
+  const tallyPortIdx = args.findIndex(a => a === '--tally-port' || a === '--port');
+  const tallyHost = tallyHostIdx !== -1 ? args[tallyHostIdx + 1] : (process.env.TALLY_HOST || '127.0.0.1');
+  const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : Number(process.env.TALLY_PORT || 9000);
+
+  const interactiveExporter = new InteractiveExporter({ host: tallyHost, port: tallyPort });
   await interactiveExporter.run();
 }
 

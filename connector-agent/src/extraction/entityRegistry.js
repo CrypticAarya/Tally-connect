@@ -375,6 +375,32 @@ export const ENTITY_REGISTRY = [
       'placeOfSupply', 'narration', 'amount', 'totalInvoice', 'items', 'ledgerEntries'
     ],
     csvColumns: DATASET_SCHEMAS.sales_register.columns
+  },
+  {
+    id: 'purchase_register',
+    name: 'Purchase Register',
+    category: ENTITY_CATEGORIES.REPORT,
+    type: 'report',
+    isReport: false,
+    requestType: REQUEST_TYPES.COLLECTION,
+    tallyId: 'PurchaseRegisterVouchersCollection',
+    tdlType: 'Voucher',
+    tdlFilter: 'IsPurchaseVoucher',
+    description: 'Purchase bills register with vendor, tax, and inventory breakdowns',
+    fileNamePrefix: 'purchase_register',
+    fetchMethod: 'fetchPurchaseRegister',
+    parserMethod: 'normalizePurchaseVouchers',
+    requiredXmlRequest: 'TdlBuilder.buildPurchaseRegisterRequest(opt) [TYPE=Collection, ID=PurchaseRegisterVouchersCollection]',
+    parameters: [
+      { name: 'fromDate', label: 'From Date (YYYY-MM-DD)', required: true, default: '2026-04-01' },
+      { name: 'toDate', label: 'To Date (YYYY-MM-DD)', required: true, default: '2026-09-30' }
+    ],
+    expectedXmlResponse: '<COLLECTION><VOUCHER VOUCHERTYPENAME="Purchase">...</VOUCHER></COLLECTION>',
+    normalizedFields: [
+      'id', 'guid', 'voucherNumber', 'date', 'partyName', 'partyGstin',
+      'placeOfSupply', 'narration', 'amount', 'totalInvoice', 'items', 'ledgerEntries'
+    ],
+    csvColumns: DATASET_SCHEMAS.purchase_register.columns
   }
 ];
 
@@ -383,6 +409,7 @@ ENTITY_REGISTRY.forEach(entity => {
   registryMap.set(entity.id.toLowerCase(), entity);
   if (entity.id === 'cost_centers') registryMap.set('cost_centres', entity);
   if (entity.id === 'ledgers') registryMap.set('chart_of_accounts', entity);
+  if (entity.id === 'purchase_register') registryMap.set('purchases', entity);
   if (entity.id === 'stock_items') registryMap.set('inventory', entity);
 });
 
@@ -402,4 +429,32 @@ export function getEntitiesByCategory(category) {
 
 export function getEntitiesByRequestType(requestType) {
   return ENTITY_REGISTRY.filter(e => e.requestType === requestType);
+}
+
+export const MASTER_DATA_IDS = new Set([
+  'ledgers',
+  'groups',
+  'cost_centers',
+  'customers',
+  'vendors',
+  'stock_items',
+  'stock_groups',
+  'units',
+  'godowns'
+]);
+
+export const DATE_FILTERED_IDS = new Set([
+  'sales_orders',
+  'purchase_orders',
+  'delivery_notes',
+  'receipt_notes',
+  'trial_balance',
+  'sales_register',
+  'purchase_register'
+]);
+
+export function isDateFilteredEntity(id) {
+  if (!id) return false;
+  const canonical = String(id).trim().toLowerCase().replace(/-/g, '_');
+  return DATE_FILTERED_IDS.has(canonical);
 }
