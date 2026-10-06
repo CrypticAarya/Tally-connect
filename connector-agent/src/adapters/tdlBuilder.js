@@ -24,6 +24,19 @@ export function formatTallyDate(dateInput) {
   return `${yyyy}${mm}${dd}`;
 }
 
+/**
+ * Returns XML tag for binding request explicitly to active Tally company
+ */
+export function getCompanyTag(options = {}) {
+  const company = options.companyName || options.company || '';
+  if (!company) return '';
+  const escaped = String(company)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `\n        <SVCurrentCompany>${escaped}</SVCurrentCompany>`;
+}
+
 export class TdlBuilder {
   /**
    * Request to discover active open companies in TallyPrime
@@ -58,7 +71,8 @@ export class TdlBuilder {
   /**
    * Request to extract Customer Master ledgers under Sundry Debtors
    */
-  static buildCustomerRequest() {
+  static buildCustomerRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -70,7 +84,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -97,7 +111,8 @@ export class TdlBuilder {
   /**
    * Request to extract Vendor Master ledgers under Sundry Creditors
    */
-  static buildVendorRequest() {
+  static buildVendorRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -109,7 +124,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -136,7 +151,8 @@ export class TdlBuilder {
   /**
    * Request to extract all Groups
    */
-  static buildGroupRequest() {
+  static buildGroupRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -148,7 +164,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -166,7 +182,8 @@ export class TdlBuilder {
   /**
    * Request to extract all Ledgers
    */
-  static buildLedgerRequest() {
+  static buildLedgerRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -178,7 +195,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -200,7 +217,8 @@ export class TdlBuilder {
   /**
    * Request to extract Chart of Accounts (all ledgers and parent groups)
    */
-  static buildChartOfAccountsRequest() {
+  static buildChartOfAccountsRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -212,7 +230,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -234,7 +252,8 @@ export class TdlBuilder {
   /**
    * Request to extract Cost Centres
    */
-  static buildCostCentreRequest() {
+  static buildCostCentreRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -246,7 +265,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -264,7 +283,8 @@ export class TdlBuilder {
   /**
    * Request to extract Stock Items
    */
-  static buildStockItemRequest() {
+  static buildStockItemRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -276,7 +296,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -298,7 +318,8 @@ export class TdlBuilder {
   /**
    * Request to extract Stock Groups
    */
-  static buildStockGroupRequest() {
+  static buildStockGroupRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -310,7 +331,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -328,7 +349,8 @@ export class TdlBuilder {
   /**
    * Request to extract Units of Measurement
    */
-  static buildUnitRequest() {
+  static buildUnitRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -340,7 +362,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -358,7 +380,8 @@ export class TdlBuilder {
   /**
    * Request to extract Godowns (Locations)
    */
-  static buildGodownRequest() {
+  static buildGodownRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
     return `
 <ENVELOPE>
   <HEADER>
@@ -370,7 +393,7 @@ export class TdlBuilder {
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -391,6 +414,7 @@ export class TdlBuilder {
   static buildSalesOrderRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -405,7 +429,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -434,6 +458,7 @@ export class TdlBuilder {
   static buildPurchaseOrderRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -448,7 +473,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -477,6 +502,7 @@ export class TdlBuilder {
   static buildDeliveryNoteRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -491,7 +517,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -520,6 +546,7 @@ export class TdlBuilder {
   static buildReceiptNoteRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -534,7 +561,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -564,6 +591,7 @@ export class TdlBuilder {
   static buildSalesRegisterRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -578,7 +606,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -608,6 +636,7 @@ export class TdlBuilder {
   static buildPurchaseRegisterRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2027-03-31');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -622,7 +651,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -652,8 +681,7 @@ export class TdlBuilder {
   static buildTrialBalanceRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2026-09-30');
-    const company = options.companyName || options.company || '';
-    const companyTag = company ? `\n        <SVCurrentCompany>${company}</SVCurrentCompany>` : '';
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -682,6 +710,7 @@ export class TdlBuilder {
   static buildTrialBalanceCollectionRequest(options = {}) {
     const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
     const toDate = formatTallyDate(options.toDate || '2026-09-30');
+    const companyTag = getCompanyTag(options);
 
     return `
 <ENVELOPE>
@@ -696,7 +725,7 @@ export class TdlBuilder {
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
-        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
@@ -706,6 +735,110 @@ export class TdlBuilder {
               GUID, NAME, PARENT, OPENINGBALANCE,
               DEBITTOTALS, CREDITTOTALS, CLOSINGBALANCE
             </FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Inventory Master (stock movement transactions) with date range
+   */
+  static buildInventoryMasterRequest(options = {}) {
+    const fromDate = formatTallyDate(options.fromDate || '2026-04-01');
+    const toDate = formatTallyDate(options.toDate || '2026-09-30');
+    const companyTag = getCompanyTag(options);
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>InventoryMasterVouchersCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>${companyTag}
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="InventoryMasterVouchersCollection">
+            <TYPE>Voucher</TYPE>
+            <FETCH>
+              GUID, DATE, VOUCHERNUMBER, VOUCHERTYPENAME, REFERENCE,
+              PARTYLEDGERNAME, NARRATION, ALLINVENTORYENTRIES.*,
+              BATCHALLOCATIONS.*
+            </FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Branch master data
+   */
+  static buildBranchRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>BranchCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="BranchCollection">
+            <TYPE>Company</TYPE>
+            <FETCH>NAME, GUID, PARTYGSTIN, GSTIN, STATENAME, ADDRESS</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
+    </DESC>
+  </BODY>
+</ENVELOPE>`.trim();
+  }
+
+  /**
+   * Request to extract Sales Representatives
+   */
+  static buildSalesRepresentativeRequest(options = {}) {
+    const companyTag = getCompanyTag(options);
+
+    return `
+<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>SalesRepresentativeCollection</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>${companyTag}
+      </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="SalesRepresentativeCollection">
+            <TYPE>CostCentre</TYPE>
+            <FETCH>NAME, GUID, PARENT, CATEGORY, LEDGERPHONE, PHONENUMBER</FETCH>
           </COLLECTION>
         </TDLMESSAGE>
       </TDL>

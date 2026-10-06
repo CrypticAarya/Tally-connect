@@ -3,6 +3,8 @@ import { extractTextValue } from '../adapters/xmlParser.js';
 import { getEntityById } from './entityRegistry.js';
 import { Transformer } from '../engine/transformer.js';
 import { CsvExporter } from '../export/csvExporter.js';
+import { XmlExporter } from '../export/xmlExporter.js';
+import { DataValidator } from '../engine/dataValidator.js';
 import { defaultExportStorage } from '../storage/localExportStorage.js';
 import { logger } from '../logger.js';
 
@@ -73,11 +75,11 @@ export class ExtractionService {
   }
 
   /**
-   * Extracts a single dataset by entity ID, normalizes it, transforms it, and exports to CSV.
+   * Extracts a single dataset by entity ID, normalizes it, transforms it, and exports to CSV and/or XML.
    * Performs strict data integrity and record reconciliation.
    * @param {string} entityId - canonical id (e.g. 'ledgers', 'trial_balance')
-   * @param {Object} [params={}] - parameters such as fromDate, toDate, profile
-   * @returns {Promise<{ entityId: string, name: string, recordCount: number, recordsExtracted: number, recordsTransformed: number, recordsExported: number, vouchersExtracted?: number, filename: string, filePath: string, sizeBytes: number, reconciliation: Object }>}
+   * @param {Object} [params={}] - parameters such as fromDate, toDate, profile, format ('csv'|'xml'|'both')
+   * @returns {Promise<{ entityId: string, name: string, recordCount: number, recordsExtracted: number, recordsTransformed: number, recordsExported: number, vouchersExtracted?: number, filename: string, filePath: string, sizeBytes: number, reconciliation: Object, status: string }>}
    */
   async extractEntity(entityId, params = {}) {
     const entity = getEntityById(entityId);
@@ -123,73 +125,107 @@ export class ExtractionService {
     const extractedCount = rawRecords.length;
     const isTransaction = [
       'sales_register', 'purchase_register', 'sales_orders',
-      'purchase_orders', 'delivery_notes', 'receipt_notes'
+      'purchase_orders', 'delivery_notes', 'receipt_notes', 'inventory_master'
     ].includes(entity.id);
 
     const fetchDurationMs = Date.now() - startTime;
     logger.info(`Retrieved ${extractedCount} raw records for ${entity.name} in ${fetchDurationMs}ms`);
 
-    // Transform into standardized rows
+    // Transform into standardized rows conforming strictly to target schema
     let csvRows = [];
     try {
       csvRows = Transformer.transform(entity.id, rawRecords, { profile: params.profile });
     } catch (err) {
       logger.error(`Transformation error for ${entity.name}: ${err.message}`);
-      throw new Error(`Failed to extract ${entity.name}. Could not normalize data for CSV: ${err.message}`);
+      throw new Error(`Failed to extract ${entity.name}. Could not normalize data for target schema: ${err.message}`);
     }
 
     const transformedCount = csvRows.length;
 
-    // Data Integrity Verification
-    if (!isTransaction && extractedCount !== transformedCount) {
-      const discrepancy = Math.abs(extractedCount - transformedCount);
-      const errMsg = `Data integrity check failed for ${entity.name}: ${extractedCount} records extracted but ${transformedCount} transformed (${discrepancy} records discrepancy).`;
+    // Run Pre-Export Authoritative Data Validation
+    const validation = DataValidator.validate(entity.id, csvRows, {
+      profile: params.profile || 'authoritative',
+      recordsExtracted: extractedCount,
+      vouchersExtracted: isTransaction ? extractedCount : undefined
+    });
+
+    if (!validation.isValid && !isTransaction) {
+      const errMsg = `Data validation failed for ${entity.name}:\n${validation.errors.join('\n')}`;
       logger.error(errMsg);
       throw new Error(errMsg);
     }
+
+    const exportFormat = (params.format || 'csv').toLowerCase();
+    let csvExportResult = null;
+    let xmlExportResult = null;
 
     // Export to CSV
-    let exportResult;
-    try {
-      exportResult = await CsvExporter.exportToStorage(entity.id, csvRows, {
-        storage: this.exportStorage,
-        fromDate: params.fromDate,
-        toDate: params.toDate,
-        profile: params.profile
-      });
-    } catch (err) {
-      logger.error(`CSV generation error for ${entity.name}: ${err.message}`);
-      throw new Error(`Failed to extract ${entity.name}. Could not create CSV file.`);
+    if (exportFormat === 'csv' || exportFormat === 'both') {
+      try {
+        csvExportResult = await CsvExporter.exportToStorage(entity.id, csvRows, {
+          storage: this.exportStorage,
+          fromDate: params.fromDate,
+          toDate: params.toDate,
+          profile: params.profile
+        });
+      } catch (err) {
+        logger.error(`CSV generation error for ${entity.name}: ${err.message}`);
+        throw new Error(`Failed to extract ${entity.name}. Could not create CSV file.`);
+      }
     }
 
-    const exportedCount = exportResult.rowCount;
-
-    // Export reconciliation
-    if (transformedCount !== exportedCount) {
-      const errMsg = `Export reconciliation failed for ${entity.name}: ${transformedCount} transformed rows but ${exportedCount} exported.`;
-      logger.error(errMsg);
-      throw new Error(errMsg);
+    // Export to XML
+    if (exportFormat === 'xml' || exportFormat === 'both') {
+      try {
+        xmlExportResult = await XmlExporter.exportToStorage(entity.id, csvRows, {
+          storage: this.exportStorage,
+          fromDate: params.fromDate,
+          toDate: params.toDate,
+          profile: params.profile,
+          companyName: params.companyName
+        });
+      } catch (err) {
+        logger.error(`XML generation error for ${entity.name}: ${err.message}`);
+        throw new Error(`Failed to extract ${entity.name}. Could not create XML file.`);
+      }
     }
+
+    const primaryExport = csvExportResult || xmlExportResult;
+    const exportedCount = primaryExport ? primaryExport.rowCount : transformedCount;
 
     const totalDurationMs = Date.now() - startTime;
-    logger.info(`Exported ${exportedCount} records to ${exportResult.filename} (${exportResult.sizeBytes} bytes) in ${totalDurationMs}ms`);
+    logger.info(`Exported ${exportedCount} records for ${entity.name} in ${totalDurationMs}ms`);
+
+    // Strict Status: If 0 records returned, report "TALLY RETURNED 0 RECORDS", never "EXPORT COMPLETE"
+    const status = (exportedCount === 0 || extractedCount === 0)
+      ? 'TALLY RETURNED 0 RECORDS'
+      : 'EXPORT COMPLETE';
 
     return {
       entityId: entity.id,
       name: entity.name,
+      company: params.companyName || '',
+      period: (params.fromDate && params.toDate) ? `${params.fromDate} to ${params.toDate}` : '',
       recordCount: exportedCount,
       recordsExtracted: extractedCount,
       recordsTransformed: transformedCount,
       recordsExported: exportedCount,
       vouchersExtracted: isTransaction ? extractedCount : undefined,
-      filename: exportResult.filename,
-      filePath: exportResult.filePath,
-      sizeBytes: exportResult.sizeBytes,
+      filename: csvExportResult?.filename || xmlExportResult?.filename,
+      filePath: csvExportResult?.filePath || xmlExportResult?.filePath,
+      csvFilename: csvExportResult?.filename || null,
+      csvFilePath: csvExportResult?.filePath || null,
+      xmlFilename: xmlExportResult?.filename || null,
+      xmlFilePath: xmlExportResult?.filePath || null,
+      sizeBytes: (csvExportResult?.sizeBytes || 0) + (xmlExportResult?.sizeBytes || 0),
+      status,
+      validation,
       reconciliation: {
         extracted: extractedCount,
         transformed: transformedCount,
         exported: exportedCount,
-        status: 'MATCH'
+        explanation: validation.explanation,
+        status: validation.isValid ? 'MATCH' : 'WARNING'
       }
     };
   }

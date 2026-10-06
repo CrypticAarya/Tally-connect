@@ -319,7 +319,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   branch: {
     id: 'branch',
     displayName: 'Branch',
-    fileNamePrefix: 'SampleBranch',
+    fileNamePrefix: 'branches',
     columns: [
       'Code',
       'Name',
@@ -331,7 +331,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   chart_of_accounts: {
     id: 'chart_of_accounts',
     displayName: 'Chart of Accounts',
-    fileNamePrefix: 'SampleChartAccounts',
+    fileNamePrefix: 'chart_accounts',
     columns: [
       'Account Code',
       'GL Name',
@@ -357,7 +357,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   cost_centers: {
     id: 'cost_centers',
     displayName: 'Cost Center',
-    fileNamePrefix: 'SampleCostCenter',
+    fileNamePrefix: 'cost_centers',
     columns: [
       'Code',
       'Name',
@@ -369,7 +369,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   customers: {
     id: 'customers',
     displayName: 'Customer Master',
-    fileNamePrefix: 'SampleCustomer',
+    fileNamePrefix: 'customers',
     columns: [
       'Customer Code',
       'Customer Name',
@@ -414,7 +414,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   inventory: {
     id: 'inventory',
     displayName: 'Inventory Policies',
-    fileNamePrefix: 'SampleInventory',
+    fileNamePrefix: 'inventory',
     columns: [
       'Item/SKU ID',
       'Item Name/Description',
@@ -440,7 +440,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   inventory_master: {
     id: 'inventory_master',
     displayName: 'Inventory Master',
-    fileNamePrefix: 'SampleInventoryMaster',
+    fileNamePrefix: 'inventory_master',
     columns: [
       'Code',
       'Transaction Date',
@@ -469,7 +469,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   stock_items: {
     id: 'stock_items',
     displayName: 'Item Master',
-    fileNamePrefix: 'SampleItemMaster',
+    fileNamePrefix: 'item_master',
     columns: [
       'Item/SKU ID',
       'Item Name/Description',
@@ -505,7 +505,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   purchase_register: {
     id: 'purchase_register',
     displayName: 'Purchase Register',
-    fileNamePrefix: 'SamplePurchaseRegister',
+    fileNamePrefix: 'purchase_register',
     columns: [
       'Code',
       'Purchase Date',
@@ -546,7 +546,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   sales_register: {
     id: 'sales_register',
     displayName: 'Sales Register',
-    fileNamePrefix: 'SampleSalesRegister',
+    fileNamePrefix: 'sales_register',
     columns: [
       'Code',
       'Sales Date',
@@ -587,7 +587,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   sales_representative: {
     id: 'sales_representative',
     displayName: 'Sales Representative',
-    fileNamePrefix: 'SampleSalesRepresentative',
+    fileNamePrefix: 'sales_representatives',
     columns: [
       'Code',
       'Name',
@@ -599,7 +599,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   trial_balance: {
     id: 'trial_balance',
     displayName: 'Trial Balance',
-    fileNamePrefix: 'SampleTrialBalances',
+    fileNamePrefix: 'trial_balance',
     columns: [
       'Month/Year',
       'Branch',
@@ -617,7 +617,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   vendors: {
     id: 'vendors',
     displayName: 'Vendor Master',
-    fileNamePrefix: 'SampleVendor',
+    fileNamePrefix: 'vendors',
     columns: [
       'Vendor Code',
       'Vendor Name',
@@ -659,7 +659,7 @@ export const AUTHORITATIVE_SCHEMAS = {
   godowns: {
     id: 'godowns',
     displayName: 'Godown',
-    fileNamePrefix: 'Samplegodown',
+    fileNamePrefix: 'godowns',
     columns: [
       'Code',
       'Name',
@@ -690,6 +690,7 @@ const ALIAS_MAP = {
   inventory: 'inventory',
   inventory_policies: 'inventory',
   inventory_master: 'inventory_master',
+  inventorymaster: 'inventory_master',
   stock_item: 'stock_items',
   stock_items: 'stock_items',
   item_master: 'stock_items',
@@ -720,11 +721,12 @@ const ALIAS_MAP = {
   sales_representative: 'sales_representative',
   sales_representatives: 'sales_representative',
   sales_rep: 'sales_representative',
+  salesrep: 'sales_representative',
   stock_movement: 'inventory_master'
 };
 
 // Default export profile in this environment
-let defaultExportProfile = 'canonical';
+let defaultExportProfile = 'authoritative';
 
 export function setDefaultExportProfile(profile) {
   if (profile === 'authoritative' || profile === 'target' || profile === 'sample') {

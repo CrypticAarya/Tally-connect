@@ -180,7 +180,21 @@ export class InteractiveExporter {
         dateParams.toDate = (toAnswer || '').trim() || defaultTo;
       }
 
-      // 4. Run Extraction
+      // 4. Select export format (CSV / XML / Both)
+      console.log('\nSelect export format:');
+      console.log('  1. CSV (default)');
+      console.log('  2. XML');
+      console.log('  3. Both CSV and XML');
+      const formatAnswer = await askQuestion(rl, 'Format [1]: ');
+      let exportFormat = 'csv';
+      const trimmedFormat = (formatAnswer || '').trim().toLowerCase();
+      if (trimmedFormat === '2' || trimmedFormat === 'xml') {
+        exportFormat = 'xml';
+      } else if (trimmedFormat === '3' || trimmedFormat === 'both') {
+        exportFormat = 'both';
+      }
+
+      // 5. Run Extraction
       console.log('\nExporting...\n');
       console.log(`✓ TallyPrime connected`);
       console.log(`✓ Company detected: ${displayCompanyName}`);
@@ -192,6 +206,7 @@ export class InteractiveExporter {
         try {
           const entityParams = {
             companyName: displayCompanyName,
+            format: exportFormat,
             ...(isDateFilteredEntity(ent.id) ? dateParams : {})
           };
 
@@ -200,7 +215,7 @@ export class InteractiveExporter {
           filesCreated.push(result);
 
           if (result.recordCount === 0) {
-            console.log(`✓ ${ent.name}: Extraction successful — 0 records.`);
+            console.log(`! ${ent.name}: TALLY RETURNED 0 RECORDS.`);
           } else {
             console.log(`✓ ${ent.name}: Extracted ${result.recordCount} records.`);
           }
@@ -210,30 +225,35 @@ export class InteractiveExporter {
         }
       }
 
-      // 5. Section 9 Structured Export Summary
+      // 6. Authoritative Section 4 Structured Export Summary
       console.log('\n========================================');
-      console.log('TALLY CONNECT');
+      console.log('TALLY CONNECT — EXPORT SUMMARY');
       console.log('========================================');
-      console.log(`Company:`);
-      console.log(`${displayCompanyName}`);
-
-      const periodStr = dateParams.fromDate && dateParams.toDate
-        ? `${dateParams.fromDate} → ${dateParams.toDate}`
-        : (companyInfo.financialYear || 'Active Financial Year');
+      console.log(`Company: ${displayCompanyName}`);
 
       for (const f of filesCreated) {
-        console.log(`\nDataset:`);
-        console.log(`${f.name}`);
-        console.log(`Period:`);
-        console.log(`${periodStr}`);
-        console.log(`Records extracted:`);
-        console.log(`${f.recordsExtracted}`);
-        console.log(`Records exported:`);
-        console.log(`${f.recordsExported}`);
-        console.log(`Status:`);
-        console.log(`✓ EXPORT COMPLETE`);
-        console.log(`File:`);
-        console.log(`${f.filePath}`);
+        console.log('----------------------------------------');
+        console.log(`Dataset:                ${f.name}`);
+        console.log(`Company:                ${displayCompanyName}`);
+        if (f.period) {
+          console.log(`Period:                 ${f.period}`);
+        }
+        console.log(`Tally records received: ${f.recordsExtracted}`);
+        console.log(`Records transformed:    ${f.recordsTransformed}`);
+        console.log(`Records exported:       ${f.recordsExported}`);
+        if (f.csvFilePath) {
+          console.log(`CSV path:               ${f.csvFilePath}`);
+        }
+        if (f.xmlFilePath) {
+          console.log(`XML path:               ${f.xmlFilePath}`);
+        }
+        console.log(`Status:                 ${f.status}`);
+        if (f.validation && f.validation.warnings && f.validation.warnings.length > 0) {
+          console.log(`Warnings:               ${f.validation.warnings.join('; ')}`);
+        }
+        if (f.validation && f.validation.explanation) {
+          console.log(`Notes:                  ${f.validation.explanation}`);
+        }
       }
 
       const exportDir = this.service.exportStorage.getBaseDir();

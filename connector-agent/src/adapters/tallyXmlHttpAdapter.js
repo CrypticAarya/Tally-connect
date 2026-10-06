@@ -156,7 +156,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Customer Master ledgers from TallyPrime
    */
   async fetchCustomers(options = {}) {
-    const xmlRequest = TdlBuilder.buildCustomerRequest();
+    const xmlRequest = TdlBuilder.buildCustomerRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'customers');
     return this.parser.normalizeCustomers(xmlResponse);
   }
@@ -165,7 +165,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Vendor Master ledgers from TallyPrime
    */
   async fetchVendors(options = {}) {
-    const xmlRequest = TdlBuilder.buildVendorRequest();
+    const xmlRequest = TdlBuilder.buildVendorRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'vendors');
     return this.parser.normalizeVendors(xmlResponse);
   }
@@ -174,7 +174,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches all Groups
    */
   async fetchGroups(options = {}) {
-    const xmlRequest = TdlBuilder.buildGroupRequest();
+    const xmlRequest = TdlBuilder.buildGroupRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'groups');
     return this.parser.normalizeGroups(xmlResponse);
   }
@@ -183,7 +183,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches all Ledgers
    */
   async fetchLedgers(options = {}) {
-    const xmlRequest = TdlBuilder.buildLedgerRequest();
+    const xmlRequest = TdlBuilder.buildLedgerRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'ledgers');
     return this.parser.normalizeLedgers(xmlResponse);
   }
@@ -199,7 +199,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Cost Centres
    */
   async fetchCostCentres(options = {}) {
-    const xmlRequest = TdlBuilder.buildCostCentreRequest();
+    const xmlRequest = TdlBuilder.buildCostCentreRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'cost_centres');
     return this.parser.normalizeCostCentres(xmlResponse);
   }
@@ -208,7 +208,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Stock Items (Inventory)
    */
   async fetchStockItems(options = {}) {
-    const xmlRequest = TdlBuilder.buildStockItemRequest();
+    const xmlRequest = TdlBuilder.buildStockItemRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'stock_items');
     return this.parser.normalizeStockItems(xmlResponse);
   }
@@ -224,7 +224,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Stock Groups
    */
   async fetchStockGroups(options = {}) {
-    const xmlRequest = TdlBuilder.buildStockGroupRequest();
+    const xmlRequest = TdlBuilder.buildStockGroupRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'stock_groups');
     return this.parser.normalizeStockGroups(xmlResponse);
   }
@@ -233,7 +233,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Units of Measurement
    */
   async fetchUnits(options = {}) {
-    const xmlRequest = TdlBuilder.buildUnitRequest();
+    const xmlRequest = TdlBuilder.buildUnitRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'units');
     return this.parser.normalizeUnits(xmlResponse);
   }
@@ -242,7 +242,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
    * Fetches Godowns (Locations)
    */
   async fetchGodowns(options = {}) {
-    const xmlRequest = TdlBuilder.buildGodownRequest();
+    const xmlRequest = TdlBuilder.buildGodownRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'godowns');
     return this.parser.normalizeGodowns(xmlResponse);
   }
@@ -299,6 +299,33 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
     const xmlRequest = TdlBuilder.buildPurchaseRegisterRequest(options);
     const xmlResponse = await this._sendTallyPost(xmlRequest, 'purchase_register');
     return this.parser.normalizePurchaseVouchers(xmlResponse);
+  }
+
+  /**
+   * Fetches Inventory Master (stock movement transactions)
+   */
+  async fetchInventoryMaster(options = {}) {
+    const xmlRequest = TdlBuilder.buildInventoryMasterRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'inventory_master');
+    return this.parser.normalizeInventoryMaster(xmlResponse);
+  }
+
+  /**
+   * Fetches Branch master data
+   */
+  async fetchBranch(options = {}) {
+    const xmlRequest = TdlBuilder.buildBranchRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'branch');
+    return this.parser.normalizeBranch(xmlResponse);
+  }
+
+  /**
+   * Fetches Sales Representatives
+   */
+  async fetchSalesRepresentative(options = {}) {
+    const xmlRequest = TdlBuilder.buildSalesRepresentativeRequest(options);
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'sales_representative');
+    return this.parser.normalizeSalesRepresentative(xmlResponse);
   }
 
   /**

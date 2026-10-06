@@ -782,4 +782,61 @@ export class TallyXmlParser {
 
     return attachMetadata([]);
   }
+
+  /**
+   * Normalizes inventory movement vouchers for Inventory Master export
+   */
+  normalizeInventoryMaster(xmlString) {
+    return this._parseVouchers(xmlString, 'Stock Movement');
+  }
+
+  /**
+   * Normalizes branch company entities
+   */
+  normalizeBranch(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const data = parsed?.ENVELOPE?.BODY?.DATA;
+    const companyNodes = extractEntityNodes(data, 'COMPANY');
+
+    const results = companyNodes.map((comp) => {
+      const name = extractTextValue(comp.NAME);
+      const guid = extractTextValue(comp.GUID) || name;
+      const gstin = extractTextValue(comp.PARTYGSTIN || comp.GSTIN);
+      return {
+        id: guid,
+        guid,
+        code: guid,
+        name,
+        gstNo: gstin,
+        gstin
+      };
+    });
+
+    return attachMetadata(results);
+  }
+
+  /**
+   * Normalizes sales representative cost centre entities
+   */
+  normalizeSalesRepresentative(xmlString) {
+    const parsed = this.parseRawXml(xmlString);
+    const data = parsed?.ENVELOPE?.BODY?.DATA;
+    const costCentres = extractEntityNodes(data, 'COSTCENTRE');
+
+    const results = costCentres.map((cc) => {
+      const name = extractTextValue(cc.NAME);
+      const guid = extractTextValue(cc.GUID) || name;
+      const mobile = extractTextValue(cc.LEDGERPHONE || cc.PHONENUMBER);
+      return {
+        id: guid,
+        guid,
+        code: guid,
+        name,
+        mobileNo: mobile,
+        mobile
+      };
+    });
+
+    return attachMetadata(results);
+  }
 }

@@ -148,10 +148,14 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     const outDirIdx = args.findIndex(a => a === '--out-dir');
     const tallyHostIdx = args.findIndex(a => a === '--tally-host' || a === '--host');
     const tallyPortIdx = args.findIndex(a => a === '--tally-port' || a === '--port');
+    const formatIdx = args.findIndex(a => a === '--format');
+
+    const exportFormat = (formatIdx !== -1 ? args[formatIdx + 1] : 'csv').toLowerCase();
 
     const params = {
       fromDate: fromDateIdx !== -1 ? args[fromDateIdx + 1] : '2026-04-01',
-      toDate: toDateIdx !== -1 ? args[toDateIdx + 1] : '2026-09-30'
+      toDate: toDateIdx !== -1 ? args[toDateIdx + 1] : '2026-09-30',
+      format: exportFormat
     };
 
     const outDir = outDirIdx !== -1 ? path.resolve(args[outDirIdx + 1]) : null;
@@ -172,7 +176,7 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
       const companyInfo = await extractionService.detectActiveCompany();
       console.log(`✔ Active Company: "${companyInfo.companyName}"`);
       params.companyName = companyInfo.companyName;
-      console.log(`\nExporting ${entityList.length} dataset(s)...`);
+      console.log(`\nExporting ${entityList.length} dataset(s) (Format: ${exportFormat.toUpperCase()})...`);
 
       const results = [];
       let totalRecords = 0;
@@ -181,25 +185,46 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
         process.stdout.write(`  Processing ${id}... `);
         const entityParams = {
           companyName: companyInfo.companyName,
+          format: exportFormat,
           ...(isDateFilteredEntity(id) ? { fromDate: params.fromDate, toDate: params.toDate } : {})
         };
         const res = await extractionService.extractEntity(id, entityParams);
         results.push(res);
         totalRecords += res.recordCount;
-        console.log(`✔ ${res.recordCount} records -> ${res.filename}`);
+        if (res.recordCount === 0) {
+          console.log(`! 0 records (TALLY RETURNED 0 RECORDS)`);
+        } else {
+          console.log(`✔ ${res.recordCount} records -> ${res.filename}`);
+        }
       }
 
       console.log('\n===============================================================');
-      console.log('EXPORT COMPLETE');
+      if (totalRecords === 0) {
+        console.log('STATUS: TALLY RETURNED 0 RECORDS');
+      } else {
+        console.log('STATUS: EXPORT COMPLETE');
+      }
       console.log('===============================================================');
       console.log(`Company:       ${companyInfo.companyName}`);
       console.log(`Datasets:      ${results.length}`);
       console.log(`Total Records: ${totalRecords}`);
-      console.log('\nFiles created:');
+
       for (const r of results) {
-        console.log(`  ✓ ${r.filename} (${r.recordCount} records, ${(r.sizeBytes / 1024).toFixed(1)} KB)`);
+        console.log('---------------------------------------------------------------');
+        console.log(`Dataset:                ${r.name}`);
+        console.log(`Company:                ${companyInfo.companyName}`);
+        if (r.period) console.log(`Period:                 ${r.period}`);
+        console.log(`Tally records received: ${r.recordsExtracted}`);
+        console.log(`Records transformed:    ${r.recordsTransformed}`);
+        console.log(`Records exported:       ${r.recordsExported}`);
+        if (r.csvFilePath) console.log(`CSV path:               ${r.csvFilePath}`);
+        if (r.xmlFilePath) console.log(`XML path:               ${r.xmlFilePath}`);
+        console.log(`Status:                 ${r.status}`);
+        if (r.validation?.warnings?.length) console.log(`Warnings:               ${r.validation.warnings.join('; ')}`);
+        if (r.validation?.explanation) console.log(`Notes:                  ${r.validation.explanation}`);
       }
-      console.log(`\nSaved to:`);
+
+      console.log('\nSaved directory:');
       console.log(`  ${extractionService.exportStorage.getBaseDir()}`);
       console.log('===============================================================\n');
       process.exit(0);

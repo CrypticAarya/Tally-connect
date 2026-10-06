@@ -1,4 +1,4 @@
-import { DATASET_SCHEMAS } from '../engine/schemas.js';
+import { DATASET_SCHEMAS, AUTHORITATIVE_SCHEMAS } from '../engine/schemas.js';
 
 /**
  * Central Entity Registry for Tally Connect
@@ -401,6 +401,71 @@ export const ENTITY_REGISTRY = [
       'placeOfSupply', 'narration', 'amount', 'totalInvoice', 'items', 'ledgerEntries'
     ],
     csvColumns: DATASET_SCHEMAS.purchase_register.columns
+  },
+  {
+    id: 'inventory_master',
+    name: 'Inventory Master',
+    category: ENTITY_CATEGORIES.TRANSACTION,
+    type: 'transaction',
+    isReport: false,
+    requestType: REQUEST_TYPES.COLLECTION,
+    tallyId: 'InventoryMasterVouchersCollection',
+    tdlType: 'Voucher',
+    description: 'Stock movement transactions with inward/outward quantities, rates, godowns, and batches',
+    fileNamePrefix: 'inventory_master',
+    fetchMethod: 'fetchInventoryMaster',
+    parserMethod: 'normalizeInventoryMaster',
+    requiredXmlRequest: 'TdlBuilder.buildInventoryMasterRequest(opt) [TYPE=Collection, ID=InventoryMasterVouchersCollection]',
+    parameters: [
+      { name: 'fromDate', label: 'From Date (YYYY-MM-DD)', required: true, default: '2026-04-01' },
+      { name: 'toDate', label: 'To Date (YYYY-MM-DD)', required: true, default: '2026-09-30' }
+    ],
+    expectedXmlResponse: '<COLLECTION><VOUCHER>...</VOUCHER></COLLECTION>',
+    normalizedFields: [
+      'id', 'guid', 'code', 'date', 'transactionDate', 'voucherType', 'voucherNumber',
+      'documentNo', 'reference', 'voucherRef', 'godown', 'itemName', 'inwardQty',
+      'outwardQty', 'rate', 'inwardValue', 'outwardValue', 'closingQty', 'closingValue',
+      'batchNo', 'mfgDate', 'expiryDate', 'partyName', 'costCenter', 'remarks'
+    ],
+    csvColumns: AUTHORITATIVE_SCHEMAS.inventory_master.columns
+  },
+  {
+    id: 'branch',
+    name: 'Branch',
+    category: ENTITY_CATEGORIES.MASTER,
+    type: 'master',
+    isReport: false,
+    requestType: REQUEST_TYPES.COLLECTION,
+    tallyId: 'BranchCollection',
+    tdlType: 'Company',
+    description: 'Branch offices and GST registration details',
+    fileNamePrefix: 'branches',
+    fetchMethod: 'fetchBranch',
+    parserMethod: 'normalizeBranch',
+    requiredXmlRequest: 'TdlBuilder.buildBranchRequest(opt) [TYPE=Collection, ID=BranchCollection]',
+    parameters: [],
+    expectedXmlResponse: '<COLLECTION><COMPANY>...</COMPANY></COLLECTION>',
+    normalizedFields: ['code', 'name', 'gstNo'],
+    csvColumns: AUTHORITATIVE_SCHEMAS.branch.columns
+  },
+  {
+    id: 'sales_representative',
+    name: 'Sales Representative',
+    category: ENTITY_CATEGORIES.MASTER,
+    type: 'master',
+    isReport: false,
+    requestType: REQUEST_TYPES.COLLECTION,
+    tallyId: 'SalesRepresentativeCollection',
+    tdlType: 'CostCentre',
+    description: 'Sales representatives and contact phone numbers',
+    fileNamePrefix: 'sales_representatives',
+    fetchMethod: 'fetchSalesRepresentative',
+    parserMethod: 'normalizeSalesRepresentative',
+    requiredXmlRequest: 'TdlBuilder.buildSalesRepresentativeRequest(opt) [TYPE=Collection, ID=SalesRepresentativeCollection]',
+    parameters: [],
+    expectedXmlResponse: '<COLLECTION><COSTCENTRE>...</COSTCENTRE></COLLECTION>',
+    normalizedFields: ['code', 'name', 'mobileNo'],
+    csvColumns: AUTHORITATIVE_SCHEMAS.sales_representative.columns
   }
 ];
 
@@ -411,6 +476,16 @@ ENTITY_REGISTRY.forEach(entity => {
   if (entity.id === 'ledgers') registryMap.set('chart_of_accounts', entity);
   if (entity.id === 'purchase_register') registryMap.set('purchases', entity);
   if (entity.id === 'stock_items') registryMap.set('inventory', entity);
+  if (entity.id === 'branch') registryMap.set('branches', entity);
+  if (entity.id === 'sales_representative') {
+    registryMap.set('sales_representatives', entity);
+    registryMap.set('salesrep', entity);
+    registryMap.set('sales_rep', entity);
+  }
+  if (entity.id === 'inventory_master') {
+    registryMap.set('inventorymaster', entity);
+    registryMap.set('stock_movement', entity);
+  }
 });
 
 export function getEntityById(id) {
@@ -440,7 +515,11 @@ export const MASTER_DATA_IDS = new Set([
   'stock_items',
   'stock_groups',
   'units',
-  'godowns'
+  'godowns',
+  'branch',
+  'branches',
+  'sales_representative',
+  'sales_representatives'
 ]);
 
 export const DATE_FILTERED_IDS = new Set([
@@ -450,7 +529,9 @@ export const DATE_FILTERED_IDS = new Set([
   'receipt_notes',
   'trial_balance',
   'sales_register',
-  'purchase_register'
+  'purchase_register',
+  'inventory_master',
+  'stock_movement'
 ]);
 
 export function isDateFilteredEntity(id) {

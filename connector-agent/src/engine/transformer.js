@@ -85,6 +85,16 @@ export class Transformer {
         return this.transformSalesRegister(rawData, profile);
       case 'purchase_register':
         return this.transformPurchaseRegister(rawData, profile);
+      case 'inventory_master':
+      case 'inventorymaster':
+      case 'stock_movement':
+        return this.transformInventoryMaster(rawData, profile);
+      case 'branch':
+      case 'branches':
+        return this.transformBranch(rawData, profile);
+      case 'sales_representative':
+      case 'sales_representatives':
+        return this.transformSalesRepresentative(rawData, profile);
       default:
         throw new Error(`No transformer implementation found for "${datasetType}"`);
     }
@@ -739,5 +749,119 @@ export class Transformer {
       }
     }
     return flatRows;
+  }
+
+  // ==========================================================================
+  // 14. INVENTORY MASTER / STOCK MOVEMENT (20 columns)
+  // ==========================================================================
+  static transformInventoryMaster(vouchers, profile = 'canonical') {
+    const flatRows = [];
+
+    for (const raw of vouchers) {
+      const vchCode = sanitizeString(raw.code || raw.guid || raw.voucherNumber || '');
+      const date = sanitizeString(raw.date || raw.transactionDate || '');
+      const vchType = sanitizeString(raw.voucherType || raw.voucherTypeName || 'Stock Movement');
+      const docNo = sanitizeString(raw.voucherNumber || raw.documentNo || '');
+      const ref = sanitizeString(raw.reference || raw.voucherRef || '');
+      const party = sanitizeString(raw.partyName || raw.partyLedgerName || '');
+      const narration = sanitizeString(raw.narration || raw.remarks || '');
+
+      const items = raw.items || raw.allInventoryEntries || [];
+      const isOutward = /sales|delivery|outward|issue|rejection out/i.test(vchType);
+
+      if (items.length > 0) {
+        for (const it of items) {
+          const itemName = sanitizeString(it.itemName || it.stockItemName || '');
+          const godown = sanitizeString(it.godown || it.godownName || '');
+          const qty = Number(it.quantity || it.actualQty || it.billedQty || 0);
+          const rate = Number(it.rate || 0);
+          const amount = Number(it.amount || (qty * rate) || 0);
+          const costCenter = sanitizeString(it.costCenter || raw.costCenter || '');
+          const batchNo = sanitizeString(it.batchNo || it.batchName || '');
+          const mfgDate = sanitizeString(it.mfgDate || '');
+          const expiryDate = sanitizeString(it.expiryDate || '');
+
+          flatRows.push({
+            'Code': vchCode,
+            'Transaction Date': date,
+            'Transaction Type': vchType,
+            'Document No': docNo,
+            'Voucher Ref (ERP)': ref,
+            'Godown Name/Code': godown,
+            'Item Code/Name': itemName,
+            'Inward Qty': isOutward ? '' : (qty ? String(qty) : ''),
+            'Outward Qty': isOutward ? (qty ? String(qty) : '') : '',
+            'Rate per Unit': rate ? rate.toFixed(2) : '',
+            'Inward Value': isOutward ? '' : (amount ? amount.toFixed(2) : ''),
+            'Outward Value': isOutward ? (amount ? amount.toFixed(2) : '') : '',
+            'Closing Qty': '',
+            'Closing Value': '',
+            'Batch No': batchNo,
+            'Mfg Date': mfgDate,
+            'Expiry Date': expiryDate,
+            'Party Name': party,
+            'Cost Centre Name/Code': costCenter,
+            'Remarks': narration
+          });
+        }
+      } else {
+        flatRows.push({
+          'Code': vchCode,
+          'Transaction Date': date,
+          'Transaction Type': vchType,
+          'Document No': docNo,
+          'Voucher Ref (ERP)': ref,
+          'Godown Name/Code': '',
+          'Item Code/Name': '',
+          'Inward Qty': '',
+          'Outward Qty': '',
+          'Rate per Unit': '',
+          'Inward Value': '',
+          'Outward Value': '',
+          'Closing Qty': '',
+          'Closing Value': '',
+          'Batch No': '',
+          'Mfg Date': '',
+          'Expiry Date': '',
+          'Party Name': party,
+          'Cost Centre Name/Code': '',
+          'Remarks': narration
+        });
+      }
+    }
+
+    return flatRows;
+  }
+
+  // ==========================================================================
+  // 15. BRANCH (3 columns)
+  // ==========================================================================
+  static transformBranch(branches, profile = 'canonical') {
+    return branches.map(raw => {
+      const code = sanitizeString(raw.code || raw.guid || raw.name || '');
+      const name = sanitizeString(raw.name || '');
+      const gstin = sanitizeString(raw.gstNo || raw.gstin || raw.partyGstin || '');
+      return {
+        'Code': code,
+        'Name': name,
+        'GSTNo': gstin
+      };
+    });
+  }
+
+  // ==========================================================================
+  // 16. SALES REPRESENTATIVE (3 columns)
+  // ==========================================================================
+  static transformSalesRepresentative(reps, profile = 'canonical') {
+    return reps.map(raw => {
+      const code = sanitizeString(raw.code || raw.guid || raw.name || '');
+      const name = sanitizeString(raw.name || '');
+      const mobile = sanitizeString(raw.mobileNo || raw.mobile || raw.phone || raw.ledgerPhone || '');
+      return {
+        'Code': code,
+        'Name': name,
+        'Mobile No': mobile
+      };
+    });
   }
 }
