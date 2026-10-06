@@ -211,48 +211,61 @@ export class TallyXmlParser {
     return parsed;
   }
 
-  normalizeCompany(xmlString) {
+  normalizeCompanies(xmlString) {
     const parsed = this.parseRawXml(xmlString);
     const data = parsed?.ENVELOPE?.BODY?.DATA;
     const companyNodes = extractEntityNodes(data, 'COMPANY');
-    const companyNode = companyNodes.length > 0 ? companyNodes[0] : null;
 
-    if (!companyNode) {
+    if (!companyNodes || companyNodes.length === 0) {
+      return [];
+    }
+
+    const companies = [];
+    for (const node of companyNodes) {
+      let companyName = '';
+      if (node['@_NAME']) {
+        companyName = extractTextValue(node['@_NAME']);
+      }
+      if (!companyName && node.NAME) {
+        companyName = extractTextValue(node.NAME);
+      }
+      if (!companyName) {
+        companyName = extractTextValue(node);
+      }
+
+      if (!companyName || companyName === 'No Company Loaded') {
+        continue;
+      }
+
+      const { from: financialYearFrom, to: financialYearTo } = computeFinancialYear(
+        node.STARTINGFROM,
+        node.ENDINGAT
+      );
+
+      companies.push({
+        name: companyName,
+        guid: extractTextValue(node.GUID) || '',
+        financialYear: `${financialYearFrom} to ${financialYearTo}`,
+        financialYearFrom,
+        financialYearTo,
+        tallyVersion: 'TallyPrime',
+        port: 9000
+      });
+    }
+
+    return companies;
+  }
+
+  normalizeCompany(xmlString) {
+    const companies = this.normalizeCompanies(xmlString);
+
+    if (companies.length === 0) {
       const err = new Error("We couldn't identify the active Tally company. Please open a company in TallyPrime and try again.");
       err.code = 'NO_ACTIVE_COMPANY';
       throw err;
     }
 
-    let companyName = '';
-    if (companyNode['@_NAME']) {
-      companyName = extractTextValue(companyNode['@_NAME']);
-    }
-    if (!companyName && companyNode.NAME) {
-      companyName = extractTextValue(companyNode.NAME);
-    }
-    if (!companyName) {
-      companyName = extractTextValue(companyNode);
-    }
-
-    if (!companyName || companyName === 'No Company Loaded') {
-      const err = new Error("We couldn't identify the active Tally company. Please open a company in TallyPrime and try again.");
-      err.code = 'NO_ACTIVE_COMPANY';
-      throw err;
-    }
-
-    const { from: financialYearFrom, to: financialYearTo } = computeFinancialYear(
-      companyNode.STARTINGFROM,
-      companyNode.ENDINGAT
-    );
-
-    return {
-      name: companyName,
-      guid: extractTextValue(companyNode.GUID) || '',
-      financialYearFrom,
-      financialYearTo,
-      tallyVersion: 'TallyPrime',
-      port: 9000
-    };
+    return companies[0];
   }
 
   normalizeCustomers(xmlString) {

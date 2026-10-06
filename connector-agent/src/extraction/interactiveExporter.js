@@ -54,9 +54,11 @@ export class InteractiveExporter {
    * @param {ExtractionService} [options.extractionService]
    */
   constructor(options = {}) {
+    this.initialCompany = options.company || null;
     this.service = options.extractionService || new ExtractionService({
       host: options.host || process.env.TALLY_HOST || '127.0.0.1',
-      port: options.port || Number(process.env.TALLY_PORT || 9000)
+      port: options.port || Number(process.env.TALLY_PORT || 9000),
+      selectedCompany: options.company || null
     });
   }
 
@@ -74,20 +76,21 @@ export class InteractiveExporter {
     });
 
     try {
-      // 1. Detect TallyPrime & Company
+      // 1. Connect to TallyPrime & Discover Open Companies
       const host = this.service.tallyAdapter?.host || '127.0.0.1';
       const port = this.service.tallyAdapter?.port || 9000;
-      process.stdout.write(`Detecting TallyPrime on ${host}:${port}... `);
-      let companyInfo;
+      process.stdout.write(`Connecting to TallyPrime on ${host}:${port}... `);
+      let availableCompanies = [];
       try {
-        companyInfo = await this.service.detectActiveCompany();
+        availableCompanies = await this.service.getAvailableCompanies();
+        console.log('CONNECTED\n');
       } catch (err) {
         console.log('');
         if (err.code === 'TALLY_NOT_RUNNING') {
           console.log('\n✖ TallyPrime could not be reached.');
           console.log('  Please ensure TallyPrime is open and XML port 9000 is enabled.\n');
         } else if (err.code === 'NO_ACTIVE_COMPANY') {
-          console.log('\n✔ TallyPrime: Connected');
+          console.log('\n✔ TallyPrime: CONNECTED');
           console.log('✖ No active Tally company detected.');
           console.log('  Please open a company in TallyPrime and try again.\n');
         } else {
@@ -97,15 +100,62 @@ export class InteractiveExporter {
         return;
       }
 
-      const displayCompanyName = typeof companyInfo.companyName === 'string'
-        ? companyInfo.companyName
-        : String(companyInfo.companyName?.['#text'] || companyInfo.companyName?.value || companyInfo.companyName?.name || companyInfo.companyName || '');
+      let selectedCompanyInfo = null;
 
-      console.log('Connected');
-      console.log(`TallyPrime: Connected`);
-      console.log(`Company: ${displayCompanyName}`);
-      if (companyInfo.financialYear) {
-        console.log(`Financial Year: ${companyInfo.financialYear}`);
+      if (this.initialCompany) {
+        try {
+          selectedCompanyInfo = await this.service.selectCompany(this.initialCompany);
+        } catch (err) {
+          console.log(`\n✖ ${err.message}\n`);
+          await askQuestion(rl, 'Press Enter to exit...');
+          return;
+        }
+      } else {
+        console.log('TallyPrime: CONNECTED\n');
+        console.log('Select the company you want to work with:\n');
+
+        for (let i = 0; i < availableCompanies.length; i++) {
+          console.log(`${i + 1}. ${availableCompanies[i].name}`);
+        }
+
+        while (!selectedCompanyInfo) {
+          console.log('\nEnter selection:');
+          const selectionInput = await askQuestion(rl, '> ');
+          const trimmed = (selectionInput || '').trim();
+
+          if (!trimmed) {
+            if (availableCompanies.length === 1) {
+              selectedCompanyInfo = availableCompanies[0];
+              await this.service.selectCompany(selectedCompanyInfo.name);
+              break;
+            }
+            console.log('Please enter a valid selection number.');
+            continue;
+          }
+
+          const num = parseInt(trimmed, 10);
+          if (!isNaN(num) && num >= 1 && num <= availableCompanies.length) {
+            selectedCompanyInfo = availableCompanies[num - 1];
+            await this.service.selectCompany(selectedCompanyInfo.name);
+            break;
+          }
+
+          // Allow entering exact company name
+          const match = availableCompanies.find(c => c.name.toLowerCase() === trimmed.toLowerCase());
+          if (match) {
+            selectedCompanyInfo = match;
+            await this.service.selectCompany(selectedCompanyInfo.name);
+            break;
+          }
+
+          console.log(`Invalid selection "${trimmed}". Please choose a number between 1 and ${availableCompanies.length}.`);
+        }
+      }
+
+      const displayCompanyName = selectedCompanyInfo.name;
+      console.log(`\nSelected Tally Company: ${displayCompanyName}`);
+      if (selectedCompanyInfo.financialYear) {
+        console.log(`Financial Year:         ${selectedCompanyInfo.financialYear}`);
       }
 
       // 2. Display available datasets
@@ -125,17 +175,17 @@ export class InteractiveExporter {
       const selectionAnswer = await askQuestion(rl, '> ');
 
       const chosenEntities = [];
-      const trimmed = (selectionAnswer || '').trim().toLowerCase();
+      const trimmedEntities = (selectionAnswer || '').trim().toLowerCase();
 
-      if (!trimmed) {
+      if (!trimmedEntities) {
         // Default to Ledgers, Customers, Trial Balance
         chosenEntities.push(getEntityById('ledgers'));
         chosenEntities.push(getEntityById('customers'));
         chosenEntities.push(getEntityById('trial_balance'));
-      } else if (trimmed === 'all') {
+      } else if (trimmedEntities === 'all') {
         allEntities.forEach(e => chosenEntities.push(e));
       } else {
-        const parts = trimmed.split(/[\s,]+/);
+        const parts = trimmedEntities.split(/[\s,]+/);
         for (const p of parts) {
           const num = parseInt(p, 10);
           if (!isNaN(num) && indexToEntityMap.has(num)) {
@@ -163,8 +213,8 @@ export class InteractiveExporter {
       const dateParams = {};
 
       if (dateFilteredEntities.length > 0) {
-        const defaultFrom = companyInfo.financialYearFrom || '2026-04-01';
-        const defaultTo = companyInfo.financialYearTo || '2026-09-30';
+        const defaultFrom = selectedCompanyInfo.financialYearFrom || '2026-04-01';
+        const defaultTo = selectedCompanyInfo.financialYearTo || '2026-09-30';
 
         if (chosenEntities.length === 1 && dateFilteredEntities.length === 1) {
           console.log(`\nEnter date range for ${dateFilteredEntities[0].name}:`);
@@ -194,10 +244,28 @@ export class InteractiveExporter {
         exportFormat = 'both';
       }
 
-      // 5. Run Extraction
+      // 5. Pre-Extraction Switch Verification
+      try {
+        await this.service.session.verifySelectedCompany();
+      } catch (err) {
+        if (err.code === 'COMPANY_CHANGED') {
+          console.log(`\n✖ Tally company changed.`);
+          console.log(`Selected company:\n  ${err.selectedCompany}`);
+          console.log(`Current Tally company:\n  ${err.currentCompanies?.join(', ')}`);
+          console.log('Please select the company again.\n');
+        } else if (err.code === 'COMPANY_NOT_AVAILABLE') {
+          console.log('\n✖ The selected Tally company is no longer available. Please select a company again.\n');
+        } else {
+          console.log(`\n✖ ${err.message}\n`);
+        }
+        await askQuestion(rl, 'Press Enter to exit...');
+        return;
+      }
+
+      // 6. Run Extraction
       console.log('\nExporting...\n');
-      console.log(`✓ TallyPrime connected`);
-      console.log(`✓ Company detected: ${displayCompanyName}`);
+      console.log(`✓ TallyPrime: CONNECTED`);
+      console.log(`✓ Selected Tally Company: ${displayCompanyName}`);
 
       const filesCreated = [];
       let totalRecords = 0;
@@ -220,6 +288,18 @@ export class InteractiveExporter {
             console.log(`✓ ${ent.name}: Extracted ${result.recordCount} records.`);
           }
         } catch (err) {
+          if (err.code === 'COMPANY_CHANGED') {
+            console.log(`\n✖ Tally company changed.`);
+            console.log(`Selected company:\n  ${err.selectedCompany}`);
+            console.log(`Current Tally company:\n  ${err.currentCompanies?.join(', ')}`);
+            console.log('Please select the company again.\n');
+            await askQuestion(rl, 'Press Enter to exit...');
+            return;
+          } else if (err.code === 'COMPANY_NOT_AVAILABLE') {
+            console.log('\n✖ The selected Tally company is no longer available. Please select a company again.\n');
+            await askQuestion(rl, 'Press Enter to exit...');
+            return;
+          }
           console.log(`✖ ${ent.name}: ${err.message}`);
           logger.error(`Extraction failed for ${ent.name}:`, err);
         }

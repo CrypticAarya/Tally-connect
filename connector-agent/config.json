@@ -3,7 +3,7 @@
   "connectionId": "conn_mul2l9ya_001943",
   "agentId": "agt_mul2la19_e96899",
   "agentToken": "",
-  "companyName": "National Trading Corporation",
+  "tenantName": "National Trading Corporation",
   "status": "ACTIVE",
   "activatedAt": "2026-09-28T09:53:41.906Z"
 }

@@ -19,6 +19,7 @@ import { DEFAULT_PUBLIC_CLOUD_URL } from './cloudConfig.js';
 import { getAllEntities, getEntityById, isDateFilteredEntity } from './extraction/entityRegistry.js';
 import { ExtractionService } from './extraction/extractionService.js';
 import { InteractiveExporter } from './extraction/interactiveExporter.js';
+import { TallyXmlHttpAdapter } from './adapters/tallyXmlHttpAdapter.js';
 import { LocalExportStorage, getDefaultExportDirectory } from './storage/localExportStorage.js';
 
 async function main() {
@@ -44,6 +45,10 @@ async function main() {
 
   const isHelp = args.includes('--help') || args.includes('-h');
   const isStatus = args.includes('--status');
+  const isCompanies = args.includes('--companies') || args.includes('-C');
+  const companyArgIdx = args.findIndex(a => a === '--company');
+  const explicitCompany = companyArgIdx !== -1 ? args[companyArgIdx + 1] : null;
+
   const isListDatasets = args.includes('--list-datasets') || args.includes('--datasets');
   const exportArgIdx = args.findIndex(a => a === '--export' || a === '-e');
   const isExport = exportArgIdx !== -1;
@@ -68,6 +73,8 @@ Usage:
 
 Mode 1: Local Tally Extraction (Default, No Activation Required):
   (no arguments)              Launch interactive dataset extraction UI
+  --companies                 List all available companies in running TallyPrime
+  --company <name>            Explicitly select company (must match an open Tally company)
   --export <list>             Extract specified datasets (e.g. ledgers,customers,trial_balance)
   --format <csv|xml|both>     Export format (default: csv)
   --list-datasets             List all available Tally datasets
@@ -91,7 +98,40 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     process.exit(0);
   }
 
-  // 2. LIST DATASETS
+  // 2. LIST COMPANIES (--companies)
+  if (isCompanies) {
+    const tallyHostIdx = args.findIndex(a => a === '--tally-host' || a === '--host');
+    const tallyPortIdx = args.findIndex(a => a === '--tally-port' || a === '--port');
+    const tallyHost = tallyHostIdx !== -1 ? args[tallyHostIdx + 1] : (process.env.TALLY_HOST || '127.0.0.1');
+    const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : Number(process.env.TALLY_PORT || 9000);
+
+    const tallyAdapter = new TallyXmlHttpAdapter({ host: tallyHost, port: tallyPort });
+    try {
+      const companies = await tallyAdapter.fetchCompanies();
+      if (!companies || companies.length === 0) {
+        console.log('Connected to TallyPrime.');
+        console.log('\nNo open companies found. Please open a company in TallyPrime.');
+        process.exit(0);
+      }
+
+      console.log('Connected to TallyPrime.\n');
+      console.log('Available companies:\n');
+      companies.forEach((c, idx) => {
+        console.log(`${idx + 1}. ${c.name}`);
+      });
+      console.log('');
+      process.exit(0);
+    } catch (err) {
+      if (err.code === 'TALLY_NOT_RUNNING') {
+        console.error(`✖ TALLY_NOT_RUNNING: Unable to connect to TallyPrime at ${tallyHost}:${tallyPort}.`);
+      } else {
+        console.error(`✖ Error retrieving companies from TallyPrime: ${err.message}`);
+      }
+      process.exit(1);
+    }
+  }
+
+  // 3. LIST DATASETS
   if (isListDatasets) {
     const entities = getAllEntities();
     console.log('\n===============================================================');
@@ -106,36 +146,68 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
     process.exit(0);
   }
 
-  // 3. STATUS
+  // 4. STATUS
   if (isStatus) {
     console.log('\n--- Tally Connect Status ---');
-    const tallyClient = new TallyClient({
-      host: '127.0.0.1',
-      port: 9000
-    });
+    const tallyHostIdx = args.findIndex(a => a === '--tally-host' || a === '--host');
+    const tallyPortIdx = args.findIndex(a => a === '--tally-port' || a === '--port');
+    const tallyHost = tallyHostIdx !== -1 ? args[tallyHostIdx + 1] : (process.env.TALLY_HOST || '127.0.0.1');
+    const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : Number(process.env.TALLY_PORT || 9000);
+
+    const tallyClient = new TallyClient({ host: tallyHost, port: tallyPort });
     const tallyStatus = await tallyClient.checkStatus();
-    console.log(`TallyPrime Status: ${tallyStatus.online ? 'Online (Port ' + tallyStatus.port + ')' : 'Offline'}`);
-    if (tallyStatus.online) {
-      console.log(`Active Company:    ${tallyStatus.activeCompany || "None detected (Open a company in TallyPrime)"}`);
-    } else {
-      console.log(`Notice:            ${tallyStatus.message || 'TallyPrime is not running.'}`);
-    }
+
+    let tenantName = 'None';
+    let agentStatus = 'ACTIVE';
+    let cloudStatus = 'Not Configured';
 
     if (fs.existsSync(configPath)) {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        console.log(`Configured Tenant: ${config.companyName || 'None'}`);
-        console.log(`Agent Status:      ${config.status || 'ACTIVE'}`);
+        // Architectural migration: migrate legacy companyName to tenantName
+        if (config.companyName && !config.tenantName) {
+          config.tenantName = config.companyName;
+          delete config.companyName;
+          try {
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          } catch (_) {}
+        } else if (config.companyName) {
+          delete config.companyName;
+          try {
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          } catch (_) {}
+        }
+
+        tenantName = config.tenantName || 'None';
+        agentStatus = config.status || 'ACTIVE';
         const cloudClient = new CloudClient({ cloudUrl: config.cloudUrl });
         const health = await cloudClient.checkHealth();
-        console.log(`Cloud Service:     ${health.success ? 'Connected' : 'Offline'}`);
+        cloudStatus = health.success ? 'Connected' : 'Offline';
       } catch (_) {}
     }
-    console.log(`Export Directory:  ${getDefaultExportDirectory()}`);
+
+    if (tallyStatus.online) {
+      console.log(`TallyPrime: ONLINE`);
+      console.log(`Tally Port: ${tallyStatus.port}`);
+      console.log(`Available Companies: ${tallyStatus.availableCompanies || 0}`);
+      console.log(`Selected Tally Company: ${explicitCompany || 'NONE'}`);
+      console.log(`Configured Tenant: ${tenantName}`);
+    } else {
+      console.log(`TallyPrime: OFFLINE`);
+      console.log(`Tally Port: ${tallyPort}`);
+      console.log(`Available Companies: 0`);
+      console.log(`Selected Tally Company: NONE`);
+      console.log(`Configured Tenant: ${tenantName}`);
+      console.log(`Notice: TALLY_NOT_RUNNING`);
+    }
+
+    console.log(`Agent Status:      ${agentStatus}`);
+    console.log(`Cloud Service:     ${cloudStatus}`);
+    console.log(`Export Directory:  ${getDefaultExportDirectory()}\n`);
     process.exit(0);
   }
 
-  // 4. CLI EXPORT MODE (--export ledgers,customers,trial_balance)
+  // 5. CLI EXPORT MODE (--export ledgers,customers,trial_balance)
   if (isExport) {
     const rawEntities = args[exportArgIdx + 1];
     if (!rawEntities || rawEntities.startsWith('-')) {
@@ -174,9 +246,32 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
 
     try {
       console.log(`\nConnecting to TallyPrime at ${tallyHost}:${tallyPort}...`);
-      const companyInfo = await extractionService.detectActiveCompany();
-      console.log(`✔ Active Company: "${companyInfo.companyName}"`);
-      params.companyName = companyInfo.companyName;
+
+      let selectedCompanyInfo;
+      if (explicitCompany) {
+        try {
+          selectedCompanyInfo = await extractionService.selectCompany(explicitCompany);
+        } catch (err) {
+          console.error(`\n✖ Error: ${err.message}\n`);
+          process.exit(1);
+        }
+      } else {
+        const availableCompanies = await extractionService.getAvailableCompanies();
+        if (availableCompanies.length === 1) {
+          selectedCompanyInfo = await extractionService.selectCompany(availableCompanies[0].name);
+        } else {
+          console.error('\n✖ Multiple Tally companies are currently open in TallyPrime:');
+          availableCompanies.forEach((c, idx) => {
+            console.error(`  ${idx + 1}. ${c.name}`);
+          });
+          console.error('\nPlease explicitly specify the company with --company "<name>", for example:');
+          console.error(`  TallyConnectAgent.exe --company "${availableCompanies[0].name}" --export ${rawEntities}\n`);
+          process.exit(1);
+        }
+      }
+
+      console.log(`✔ Selected Tally Company: "${selectedCompanyInfo.name}"`);
+      params.companyName = selectedCompanyInfo.name;
       console.log(`\nExporting ${entityList.length} dataset(s) (Format: ${exportFormat.toUpperCase()})...`);
 
       const results = [];
@@ -185,7 +280,7 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
       for (const id of entityList) {
         process.stdout.write(`  Processing ${id}... `);
         const entityParams = {
-          companyName: companyInfo.companyName,
+          companyName: selectedCompanyInfo.name,
           format: exportFormat,
           ...(isDateFilteredEntity(id) ? { fromDate: params.fromDate, toDate: params.toDate } : {})
         };
@@ -206,14 +301,14 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
         console.log('STATUS: EXPORT COMPLETE');
       }
       console.log('===============================================================');
-      console.log(`Company:       ${companyInfo.companyName}`);
+      console.log(`Company:       ${selectedCompanyInfo.name}`);
       console.log(`Datasets:      ${results.length}`);
       console.log(`Total Records: ${totalRecords}`);
 
       for (const r of results) {
         console.log('---------------------------------------------------------------');
         console.log(`Dataset:                ${r.name}`);
-        console.log(`Company:                ${companyInfo.companyName}`);
+        console.log(`Company:                ${selectedCompanyInfo.name}`);
         if (r.period) console.log(`Period:                 ${r.period}`);
         console.log(`Tally records received: ${r.recordsExtracted}`);
         console.log(`Records transformed:    ${r.recordsTransformed}`);
@@ -293,7 +388,11 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
   const tallyHost = tallyHostIdx !== -1 ? args[tallyHostIdx + 1] : (process.env.TALLY_HOST || '127.0.0.1');
   const tallyPort = tallyPortIdx !== -1 ? Number(args[tallyPortIdx + 1]) : Number(process.env.TALLY_PORT || 9000);
 
-  const interactiveExporter = new InteractiveExporter({ host: tallyHost, port: tallyPort });
+  const interactiveExporter = new InteractiveExporter({
+    host: tallyHost,
+    port: tallyPort,
+    company: explicitCompany
+  });
   await interactiveExporter.run();
 }
 

@@ -156,6 +156,28 @@ export const ENTITY_REGISTRY = [
     csvColumns: DATASET_SCHEMAS.stock_items.columns
   },
   {
+    id: 'inventory',
+    name: 'Inventory Policies',
+    category: ENTITY_CATEGORIES.MASTER,
+    type: 'master',
+    isReport: false,
+    requestType: REQUEST_TYPES.COLLECTION,
+    tallyId: 'StockItemCollection',
+    tdlType: 'StockItem',
+    description: 'Inventory item reorder points, min/max levels, lead times, and policies',
+    fileNamePrefix: 'inventory',
+    fetchMethod: 'fetchStockItems',
+    parserMethod: 'normalizeStockItems',
+    requiredXmlRequest: 'TdlBuilder.buildStockItemRequest() [TYPE=Collection, ID=StockItemCollection]',
+    parameters: [],
+    expectedXmlResponse: '<COLLECTION><STOCKITEM NAME="...">...</STOCKITEM></COLLECTION>',
+    normalizedFields: [
+      'guid', 'name', 'code', 'parent', 'category', 'uom', 'hsnCode', 'reorderLevel',
+      'minStockQty', 'maxStockQty', 'status'
+    ],
+    csvColumns: AUTHORITATIVE_SCHEMAS.inventory.columns
+  },
+  {
     id: 'stock_groups',
     name: 'Stock Groups',
     category: ENTITY_CATEGORIES.MASTER,
@@ -475,7 +497,6 @@ ENTITY_REGISTRY.forEach(entity => {
   if (entity.id === 'cost_centers') registryMap.set('cost_centres', entity);
   if (entity.id === 'ledgers') registryMap.set('chart_of_accounts', entity);
   if (entity.id === 'purchase_register') registryMap.set('purchases', entity);
-  if (entity.id === 'stock_items') registryMap.set('inventory', entity);
   if (entity.id === 'branch') registryMap.set('branches', entity);
   if (entity.id === 'sales_representative') {
     registryMap.set('sales_representatives', entity);
@@ -513,6 +534,7 @@ export const MASTER_DATA_IDS = new Set([
   'customers',
   'vendors',
   'stock_items',
+  'inventory',
   'stock_groups',
   'units',
   'godowns',

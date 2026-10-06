@@ -72,6 +72,7 @@ export class CloudClient {
         agentId: data.agent_id,
         agentToken: data.agent_token,
         companyName: data.company_name,
+        tenantName: data.company_name,
         status: data.status
       };
     } catch (err) {

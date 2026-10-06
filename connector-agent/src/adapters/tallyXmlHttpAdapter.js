@@ -105,7 +105,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
   }
 
   /**
-   * Tests connection to the real TallyPrime instance
+   * Tests connection to the real TallyPrime instance and retrieves all open companies
    */
   async testConnection() {
     const startTime = Date.now();
@@ -114,19 +114,37 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
     try {
       const xmlResponse = await this._sendTallyPost(xmlRequest, 'probe_company');
       const latencyMs = Date.now() - startTime;
-      const companyInfo = this.parser.normalizeCompany(xmlResponse);
+      const companies = this.parser.normalizeCompanies(xmlResponse);
+
+      if (companies.length === 0) {
+        return {
+          available: false,
+          tallyRunning: true,
+          latencyMs,
+          companies: [],
+          companyName: null,
+          version: 'TallyPrime',
+          port: this.port,
+          errorCode: 'NO_ACTIVE_COMPANY',
+          message: `Connected to TallyPrime at ${this.baseUrl}, but no active company is loaded.`
+        };
+      }
+
+      const primary = companies[0];
+      const companyNamesList = companies.map(c => `"${c.name}"`).join(', ');
 
       return {
         available: true,
         tallyRunning: true,
         latencyMs,
-        companyName: companyInfo.name,
-        version: companyInfo.tallyVersion,
+        companies,
+        companyName: primary.name,
+        version: primary.tallyVersion,
         port: this.port,
-        financialYear: `${companyInfo.financialYearFrom} to ${companyInfo.financialYearTo}`,
-        financialYearFrom: companyInfo.financialYearFrom,
-        financialYearTo: companyInfo.financialYearTo,
-        message: `Connected to TallyPrime at ${this.baseUrl} ("${companyInfo.name}")`
+        financialYear: `${primary.financialYearFrom} to ${primary.financialYearTo}`,
+        financialYearFrom: primary.financialYearFrom,
+        financialYearTo: primary.financialYearTo,
+        message: `Connected to TallyPrime at ${this.baseUrl} (${companies.length} open company(ies): ${companyNamesList})`
       };
     } catch (err) {
       const isConnectionIssue = err.code === 'TALLY_NOT_RUNNING' || err.message?.includes('TALLY_NOT_RUNNING');
@@ -134,6 +152,7 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
         available: false,
         tallyRunning: !isConnectionIssue,
         latencyMs: Date.now() - startTime,
+        companies: [],
         companyName: null,
         version: null,
         port: this.port,
@@ -144,7 +163,16 @@ export class TallyXmlHttpAdapter extends TallyAdapter {
   }
 
   /**
-   * Fetches active company info
+   * Fetches all open companies from TallyPrime
+   */
+  async fetchCompanies() {
+    const xmlRequest = TdlBuilder.buildCompanyRequest();
+    const xmlResponse = await this._sendTallyPost(xmlRequest, 'companies');
+    return this.parser.normalizeCompanies(xmlResponse);
+  }
+
+  /**
+   * Fetches active company info (first open company)
    */
   async fetchCompany() {
     const xmlRequest = TdlBuilder.buildCompanyRequest();

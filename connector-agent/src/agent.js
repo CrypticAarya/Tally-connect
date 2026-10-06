@@ -39,6 +39,21 @@ export class ConnectorAgent {
     try {
       const raw = fs.readFileSync(this.configPath, 'utf-8');
       this.config = JSON.parse(raw);
+
+      // Architectural Rule: Separate Cloud Tenant Identity from TallyPrime Company Identity
+      // Migrate legacy config.companyName -> config.tenantName and purge companyName from file
+      if (this.config.companyName && !this.config.tenantName) {
+        this.config.tenantName = this.config.companyName;
+        delete this.config.companyName;
+        try {
+          fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+        } catch (_) { }
+      } else if (this.config.companyName) {
+        delete this.config.companyName;
+        try {
+          fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
+        } catch (_) { }
+      }
     } catch (err) {
       throw new Error(`Failed to parse config.json: ${err.message}`);
     }
@@ -91,7 +106,8 @@ export class ConnectorAgent {
       throw new Error(err);
     }
 
-    logger.info(`Agent activated successfully: connection_id=${activation.connectionId}, agent_id=${activation.agentId}, company="${activation.companyName}"`);
+    const tenantName = activation.companyName || activation.tenantName || 'Customer Account';
+    logger.info(`Agent activated successfully: connection_id=${activation.connectionId}, agent_id=${activation.agentId}, tenant="${tenantName}"`);
 
     // Output required customer confirmation
     console.log('\n======================================================');
@@ -103,7 +119,7 @@ export class ConnectorAgent {
       connectionId: activation.connectionId,
       agentId: activation.agentId,
       agentToken: activation.agentToken,
-      companyName: activation.companyName,
+      tenantName,
       status: 'ACTIVE',
       machineName: this.machineName,
       tallyHost,
@@ -166,7 +182,7 @@ export class ConnectorAgent {
     // 1. Load config
     this.loadConfig();
     const connLabel = this.config.connectionId || this.config.connectorId;
-    logger.info(`[Startup] Restored session from config.json (Connection: ${connLabel}, Company: "${this.config.companyName || 'Active'}")`);
+    logger.info(`[Startup] Restored session from config.json (Connection: ${connLabel}, Tenant: "${this.config.tenantName || 'None'}")`);
     logger.info(`[Startup] Target Cloud: ${this.config.cloudUrl}`);
     logger.info(`[Startup] Target Tally: http://${this.config.tallyHost || '127.0.0.1'}:${this.config.tallyPort || 9000}`);
 

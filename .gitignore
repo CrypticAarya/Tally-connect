@@ -8,6 +8,7 @@ connector-agent/bin/
 scratch/
 debug/
 exports/
+inspection_exports/
 .env
 .env.*
 *.env

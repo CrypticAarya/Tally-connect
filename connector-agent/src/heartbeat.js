@@ -29,7 +29,7 @@ export class HeartbeatService {
       agentId: this.config.agentId,
       machineName: this.machineName,
       tallyStatus: tallyInfo.online ? 'ONLINE' : 'OFFLINE',
-      activeCompany: tallyInfo.activeCompany || this.config.companyName || 'None',
+      activeCompany: (tallyInfo.online && tallyInfo.activeCompany) ? tallyInfo.activeCompany : null,
       port: tallyInfo.port || 9000,
       agentVersion: this.config.agentVersion || '1.0.0-beta',
       timestamp: new Date().toISOString()

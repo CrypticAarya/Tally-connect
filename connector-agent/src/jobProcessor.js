@@ -71,9 +71,18 @@ export class JobProcessor {
       const schema = getSchema(datasetKey);
 
       // 3. Query local TallyPrime via TallyXmlHttpAdapter
-      logger.job(job.id, `2/4 Fetching ${datasetKey} data from local TallyPrime...`);
+      // Enforce live TallyPrime company identity. Zero silent fallback to cloud or config.
+      const tallyStatus = await this.tallyAdapter.testConnection();
+      if (!tallyStatus.available || !tallyStatus.companyName) {
+        throw new Error(`Cannot execute job ${job.id}: ${tallyStatus.message || 'No active company detected in TallyPrime'}`);
+      }
+
+      logger.job(job.id, `2/4 Fetching ${datasetKey} data from local TallyPrime (Company: "${tallyStatus.companyName}")...`);
       let rawData = [];
-      const filters = job.filters || {};
+      const filters = {
+        ...(job.filters || {}),
+        companyName: tallyStatus.companyName
+      };
 
       switch (datasetKey) {
         case 'CUSTOMER':

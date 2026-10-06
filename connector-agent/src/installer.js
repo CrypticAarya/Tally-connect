@@ -224,9 +224,10 @@ export class Installer {
       }, { throwOnError: installArgs.throwOnError });
     }
 
+    const tenantName = activationRes.companyName || activationRes.tenantName || 'Customer Account';
     console.log('  ✔ Activation code verified');
-    console.log(`  ✔ Connected Company: "${activationRes.companyName}"`);
-    logger.info(`Agent activated successfully: connection_id=${activationRes.connectionId}, agent_id=${activationRes.agentId}, company="${activationRes.companyName}"`);
+    console.log(`  ✔ Connected Cloud Tenant: "${tenantName}"`);
+    logger.info(`Agent activated successfully: connection_id=${activationRes.connectionId}, agent_id=${activationRes.agentId}, tenant="${tenantName}"`);
 
     // -------------------------------------------------------------
     // Step 6: Save local credentials
@@ -237,7 +238,7 @@ export class Installer {
       connectionId: activationRes.connectionId,
       agentId: activationRes.agentId,
       agentToken: activationRes.agentToken,
-      companyName: activationRes.companyName,
+      tenantName,
       status: 'ACTIVE',
       machineName,
       tallyHost,

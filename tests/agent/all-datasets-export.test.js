@@ -1,5 +1,5 @@
 /**
- * Comprehensive Acceptance Test for ALL 19 Supported Datasets
+ * Comprehensive Acceptance Test for ALL 20 Supported Datasets
  * 
  * Verifies end-to-end architecture for:
  * 1. Ledgers / Chart of Accounts
@@ -48,7 +48,7 @@ if (!fs.existsSync(testExportDir)) {
 const testStorage = new LocalExportStorage({ baseDir: testExportDir });
 
 console.log('===============================================================');
-console.log('🧪 VERIFYING ALL 19 SUPPORTED DATASETS IN TALLY CONNECT');
+console.log('🧪 VERIFYING ALL 20 SUPPORTED DATASETS IN TALLY CONNECT');
 console.log('===============================================================\n');
 
 // Mock data fixtures representing real parsed Tally XML canonical structures

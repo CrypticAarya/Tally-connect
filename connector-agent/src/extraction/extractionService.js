@@ -6,6 +6,7 @@ import { CsvExporter } from '../export/csvExporter.js';
 import { XmlExporter } from '../export/xmlExporter.js';
 import { DataValidator } from '../engine/dataValidator.js';
 import { defaultExportStorage } from '../storage/localExportStorage.js';
+import { ExtractionSession } from './extractionSession.js';
 import { logger } from '../logger.js';
 
 export class ExtractionService {
@@ -13,6 +14,7 @@ export class ExtractionService {
    * @param {Object} [options={}]
    * @param {TallyXmlHttpAdapter} [options.tallyAdapter]
    * @param {LocalExportStorage} [options.exportStorage]
+   * @param {ExtractionSession} [options.session]
    */
   constructor(options = {}) {
     this.tallyAdapter = options.tallyAdapter || new TallyXmlHttpAdapter({
@@ -20,6 +22,33 @@ export class ExtractionService {
       port: options.port || 9000
     });
     this.exportStorage = options.exportStorage || defaultExportStorage;
+    this.session = options.session || new ExtractionSession({
+      tallyHost: options.host || this.tallyAdapter.host || '127.0.0.1',
+      tallyPort: options.port || this.tallyAdapter.port || 9000,
+      tallyAdapter: this.tallyAdapter,
+      selectedCompany: options.selectedCompany || null
+    });
+  }
+
+  /**
+   * Retrieves available open companies from live TallyPrime instance.
+   */
+  async getAvailableCompanies() {
+    return this.session.refreshAvailableCompanies();
+  }
+
+  /**
+   * Explicitly sets user selected company in session after validating against live Tally.
+   */
+  async selectCompany(companyName) {
+    return this.session.selectCompany(companyName);
+  }
+
+  /**
+   * Returns currently selected Tally company from session or null.
+   */
+  getSelectedCompany() {
+    return this.session.selectedCompany;
   }
 
   /**
@@ -87,8 +116,25 @@ export class ExtractionService {
       throw new Error(`Unknown dataset: "${entityId}"`);
     }
 
+    // Architectural Rule: User MUST explicitly select a Tally company.
+    // If params.companyName is provided, validate and register it in session.
+    if (params.companyName) {
+      if (!this.session.selectedCompany || this.session.selectedCompany.toLowerCase() !== String(params.companyName).trim().toLowerCase()) {
+        await this.session.selectCompany(params.companyName);
+      }
+    }
+
+    // Verify that a company has been explicitly selected and remains unchanged in live Tally
+    const verified = await this.session.verifySelectedCompany();
+    const liveCompany = verified.name;
+
+    const extractionParams = {
+      ...params,
+      companyName: liveCompany
+    };
+
     const startTime = Date.now();
-    logger.info(`Starting extraction for dataset: ${entity.name} (${entity.id})...`);
+    logger.info(`Starting extraction for dataset: ${entity.name} (${entity.id}) [Company: "${liveCompany}"]...`);
 
     const fetchMethod = entity.fetchMethod;
     if (typeof this.tallyAdapter[fetchMethod] !== 'function') {
@@ -97,7 +143,7 @@ export class ExtractionService {
 
     let rawRecords;
     try {
-      rawRecords = await this.tallyAdapter[fetchMethod](params);
+      rawRecords = await this.tallyAdapter[fetchMethod](extractionParams);
     } catch (err) {
       const durationMs = Date.now() - startTime;
       logger.error(`Failed to retrieve ${entity.name} from TallyPrime after ${durationMs}ms: ${err.message}`);
@@ -134,7 +180,7 @@ export class ExtractionService {
     // Transform into standardized rows conforming strictly to target schema
     let csvRows = [];
     try {
-      csvRows = Transformer.transform(entity.id, rawRecords, { profile: params.profile });
+      csvRows = Transformer.transform(entity.id, rawRecords, { profile: extractionParams.profile });
     } catch (err) {
       logger.error(`Transformation error for ${entity.name}: ${err.message}`);
       throw new Error(`Failed to extract ${entity.name}. Could not normalize data for target schema: ${err.message}`);
@@ -144,7 +190,7 @@ export class ExtractionService {
 
     // Run Pre-Export Authoritative Data Validation
     const validation = DataValidator.validate(entity.id, csvRows, {
-      profile: params.profile || 'authoritative',
+      profile: extractionParams.profile || 'authoritative',
       recordsExtracted: extractedCount,
       vouchersExtracted: isTransaction ? extractedCount : undefined
     });
@@ -155,7 +201,7 @@ export class ExtractionService {
       throw new Error(errMsg);
     }
 
-    const exportFormat = (params.format || 'csv').toLowerCase();
+    const exportFormat = (extractionParams.format || 'csv').toLowerCase();
     let csvExportResult = null;
     let xmlExportResult = null;
 
@@ -164,9 +210,10 @@ export class ExtractionService {
       try {
         csvExportResult = await CsvExporter.exportToStorage(entity.id, csvRows, {
           storage: this.exportStorage,
-          fromDate: params.fromDate,
-          toDate: params.toDate,
-          profile: params.profile
+          fromDate: extractionParams.fromDate,
+          toDate: extractionParams.toDate,
+          profile: extractionParams.profile,
+          companyName: liveCompany
         });
       } catch (err) {
         logger.error(`CSV generation error for ${entity.name}: ${err.message}`);
@@ -179,10 +226,10 @@ export class ExtractionService {
       try {
         xmlExportResult = await XmlExporter.exportToStorage(entity.id, csvRows, {
           storage: this.exportStorage,
-          fromDate: params.fromDate,
-          toDate: params.toDate,
-          profile: params.profile,
-          companyName: params.companyName
+          fromDate: extractionParams.fromDate,
+          toDate: extractionParams.toDate,
+          profile: extractionParams.profile,
+          companyName: liveCompany
         });
       } catch (err) {
         logger.error(`XML generation error for ${entity.name}: ${err.message}`);
@@ -204,8 +251,8 @@ export class ExtractionService {
     return {
       entityId: entity.id,
       name: entity.name,
-      company: params.companyName || '',
-      period: (params.fromDate && params.toDate) ? `${params.fromDate} to ${params.toDate}` : '',
+      company: liveCompany,
+      period: (extractionParams.fromDate && extractionParams.toDate) ? `${extractionParams.fromDate} to ${extractionParams.toDate}` : '',
       recordCount: exportedCount,
       recordsExtracted: extractedCount,
       recordsTransformed: transformedCount,
@@ -241,15 +288,22 @@ export class ExtractionService {
       throw new Error('Please select at least one dataset to export.');
     }
 
-    // 1. Detect Company (strict validation)
-    const companyInfo = await this.detectActiveCompany();
+    if (params.companyName) {
+      if (!this.session.selectedCompany || this.session.selectedCompany.toLowerCase() !== String(params.companyName).trim().toLowerCase()) {
+        await this.session.selectCompany(params.companyName);
+      }
+    }
+
+    // 1. Verify Company (strict validation & switch detection)
+    const verified = await this.session.verifySelectedCompany();
+    const companyName = verified.name;
 
     // 2. Extract selected entities
     const files = [];
     for (const id of entityIds) {
       const result = await this.extractEntity(id, {
         ...params,
-        companyName: companyInfo.companyName
+        companyName
       });
       files.push(result);
     }

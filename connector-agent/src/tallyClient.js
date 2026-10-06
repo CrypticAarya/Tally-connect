@@ -48,25 +48,30 @@ export class TallyClient {
 
       const xmlText = await response.text();
       const parsed = this.parser.parse(xmlText);
-      const collection = parsed?.ENVELOPE?.BODY?.DATA?.COLLECTION;
-      const companyNode = collection?.COMPANY;
+      const data = parsed?.ENVELOPE?.BODY?.DATA;
+      const collection = data?.COLLECTION || data;
+      const rawNodes = collection?.COMPANY
+        ? (Array.isArray(collection.COMPANY) ? collection.COMPANY : [collection.COMPANY])
+        : [];
 
-      let rawNode = Array.isArray(companyNode) && companyNode.length > 0 ? companyNode[0] : companyNode;
-      let companyName = null;
-      if (rawNode) {
-        if (rawNode['@_NAME']) {
-          companyName = extractTextValue(rawNode['@_NAME']);
-        } else if (rawNode.NAME) {
-          companyName = extractTextValue(rawNode.NAME);
-        } else {
-          companyName = extractTextValue(rawNode);
+      const companies = [];
+      for (const node of rawNodes) {
+        let name = '';
+        if (node['@_NAME']) name = extractTextValue(node['@_NAME']);
+        else if (node.NAME) name = extractTextValue(node.NAME);
+        else name = extractTextValue(node);
+
+        if (name && name !== 'No Company Loaded' && !companies.includes(name)) {
+          companies.push(name);
         }
       }
 
-      if (!companyName || companyName === 'No Company Loaded') {
+      if (companies.length === 0) {
         return {
           online: true,
           port: this.port,
+          companies: [],
+          availableCompanies: 0,
           activeCompany: null,
           latencyMs: Date.now() - startTime,
           error: 'NO_ACTIVE_COMPANY',
@@ -77,7 +82,9 @@ export class TallyClient {
       return {
         online: true,
         port: this.port,
-        activeCompany: companyName,
+        companies,
+        availableCompanies: companies.length,
+        activeCompany: companies[0],
         latencyMs: Date.now() - startTime
       };
     } catch (err) {
@@ -85,6 +92,8 @@ export class TallyClient {
       return {
         online: false,
         port: this.port,
+        companies: [],
+        availableCompanies: 0,
         activeCompany: null,
         latencyMs,
         error: 'TALLY_NOT_RUNNING',

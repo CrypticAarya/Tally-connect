@@ -161,7 +161,7 @@ async function runTest() {
   assert(savedConfig.connectionId === initData.connection_id, `config.connectionId matches: ${savedConfig.connectionId}`);
   assert(savedConfig.agentId === agents[0].id, `config.agentId matches: ${savedConfig.agentId}`);
   assert(savedConfig.agentToken && savedConfig.agentToken.length >= 32, `Secure agentToken saved: ${savedConfig.agentToken.substring(0, 16)}...`);
-  assert(Boolean(savedConfig.companyName), `config.companyName saved: "${savedConfig.companyName}"`);
+  assert(Boolean(savedConfig.tenantName || savedConfig.companyName), `config.tenantName saved: "${savedConfig.tenantName || savedConfig.companyName}"`);
   assert(savedConfig.status === 'ACTIVE', `config.status is ACTIVE`);
   assert(savedConfig.cloudUrl === SERVER_URL, `config.cloudUrl is ${SERVER_URL}`);
   console.log('✓ Credentials saved');
