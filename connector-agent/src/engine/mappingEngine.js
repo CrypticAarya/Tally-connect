@@ -306,7 +306,110 @@ export const MAPPING_CATALOG = {
     { target: 'Code', type: FIELD_CLASSIFICATION.DERIVED, source: 'guid/code', description: 'Representative code' },
     { target: 'Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'NAME', description: 'Representative name' },
     { target: 'Mobile No', type: FIELD_CLASSIFICATION.DIRECT, source: 'LEDGERPHONE', description: 'Mobile / contact number' }
+  ],
+
+  // 14. GROUPS (5 columns)
+  groups: [
+    { target: 'Group Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'NAME', description: 'Group name' },
+    { target: 'Parent Group', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARENT', description: 'Parent group' },
+    { target: 'Is Addable', type: FIELD_CLASSIFICATION.CLASSIFIED, source: 'ISADDABLE', description: 'Yes/No' },
+    { target: 'Is Sub Ledger', type: FIELD_CLASSIFICATION.CLASSIFIED, source: 'ISSUBLEDGER', description: 'Yes/No' },
+    { target: 'Is Calculate', type: FIELD_CLASSIFICATION.CLASSIFIED, source: 'ISCALCULATE', description: 'Yes/No' }
+  ],
+
+  // 15. STOCK GROUPS (3 columns)
+  stock_groups: [
+    { target: 'Stock Group Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'NAME', description: 'Stock group name' },
+    { target: 'Parent', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARENT', description: 'Parent stock group' },
+    { target: 'Is Addable', type: FIELD_CLASSIFICATION.CLASSIFIED, source: 'ISADDABLE', description: 'Yes/No' }
+  ],
+
+  // 16. UNITS (4 columns)
+  units: [
+    { target: 'Unit Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'NAME', description: 'Unit name' },
+    { target: 'Original Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'ORIGINALNAME', description: 'Original UOM name' },
+    { target: 'Decimal Places', type: FIELD_CLASSIFICATION.DIRECT, source: 'DECIMALPLACES', description: 'Decimal places' },
+    { target: 'GST Excluded', type: FIELD_CLASSIFICATION.CLASSIFIED, source: 'ISGSTEXCLUDED', description: 'Yes/No' }
+  ],
+
+  // 17. SALES ORDERS (13 columns)
+  sales_orders: [
+    { target: 'Order Number', type: FIELD_CLASSIFICATION.DIRECT, source: 'VOUCHERNUMBER', description: 'Sales order number' },
+    { target: 'Order Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'DATE', description: 'Order date YYYY-MM-DD' },
+    { target: 'Due Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'BASICDUEDATE', description: 'Due date' },
+    { target: 'Customer Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYLEDGERNAME', description: 'Customer name' },
+    { target: 'GSTIN', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYGSTIN', description: 'Customer GSTIN' },
+    { target: 'Place of Supply', type: FIELD_CLASSIFICATION.DIRECT, source: 'PLACEOFSUPPLY', description: 'Place of supply' },
+    { target: 'Item Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'STOCKITEMNAME', description: 'Stock item name' },
+    { target: 'Quantity', type: FIELD_CLASSIFICATION.DERIVED, source: 'BILLEDQTY', description: 'Ordered quantity' },
+    { target: 'Rate', type: FIELD_CLASSIFICATION.DERIVED, source: 'RATE', description: 'Item unit rate' },
+    { target: 'Amount', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Line amount' },
+    { target: 'Godown', type: FIELD_CLASSIFICATION.DIRECT, source: 'GODOWNNAME', description: 'Warehouse location' },
+    { target: 'Order Total', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Order grand total' },
+    { target: 'Narration', type: FIELD_CLASSIFICATION.DIRECT, source: 'NARRATION', description: 'Order narration' }
+  ],
+
+  // 18. PURCHASE ORDERS (13 columns)
+  purchase_orders: [
+    { target: 'Order Number', type: FIELD_CLASSIFICATION.DIRECT, source: 'VOUCHERNUMBER', description: 'Purchase order number' },
+    { target: 'Order Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'DATE', description: 'Order date YYYY-MM-DD' },
+    { target: 'Due Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'BASICDUEDATE', description: 'Due date' },
+    { target: 'Vendor Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYLEDGERNAME', description: 'Vendor name' },
+    { target: 'GSTIN', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYGSTIN', description: 'Vendor GSTIN' },
+    { target: 'Place of Supply', type: FIELD_CLASSIFICATION.DIRECT, source: 'PLACEOFSUPPLY', description: 'Place of supply' },
+    { target: 'Item Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'STOCKITEMNAME', description: 'Stock item name' },
+    { target: 'Quantity', type: FIELD_CLASSIFICATION.DERIVED, source: 'BILLEDQTY', description: 'Ordered quantity' },
+    { target: 'Rate', type: FIELD_CLASSIFICATION.DERIVED, source: 'RATE', description: 'Item unit rate' },
+    { target: 'Amount', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Line amount' },
+    { target: 'Godown', type: FIELD_CLASSIFICATION.DIRECT, source: 'GODOWNNAME', description: 'Warehouse location' },
+    { target: 'Order Total', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Order grand total' },
+    { target: 'Narration', type: FIELD_CLASSIFICATION.DIRECT, source: 'NARRATION', description: 'Order narration' }
+  ],
+
+  // 19. DELIVERY NOTES (12 columns)
+  delivery_notes: [
+    { target: 'Note Number', type: FIELD_CLASSIFICATION.DIRECT, source: 'VOUCHERNUMBER', description: 'Delivery challan number' },
+    { target: 'Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'DATE', description: 'Dispatch date YYYY-MM-DD' },
+    { target: 'Customer Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYLEDGERNAME', description: 'Customer name' },
+    { target: 'GSTIN', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYGSTIN', description: 'Customer GSTIN' },
+    { target: 'Place of Supply', type: FIELD_CLASSIFICATION.DIRECT, source: 'PLACEOFSUPPLY', description: 'Place of supply' },
+    { target: 'Item Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'STOCKITEMNAME', description: 'Stock item name' },
+    { target: 'Quantity', type: FIELD_CLASSIFICATION.DERIVED, source: 'BILLEDQTY', description: 'Delivered quantity' },
+    { target: 'Rate', type: FIELD_CLASSIFICATION.DERIVED, source: 'RATE', description: 'Item unit rate' },
+    { target: 'Amount', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Line amount' },
+    { target: 'Godown', type: FIELD_CLASSIFICATION.DIRECT, source: 'GODOWNNAME', description: 'Warehouse location' },
+    { target: 'Note Total', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Note total' },
+    { target: 'Narration', type: FIELD_CLASSIFICATION.DIRECT, source: 'NARRATION', description: 'Challan narration' }
+  ],
+
+  // 20. RECEIPT NOTES (12 columns)
+  receipt_notes: [
+    { target: 'Note Number', type: FIELD_CLASSIFICATION.DIRECT, source: 'VOUCHERNUMBER', description: 'Goods receipt number' },
+    { target: 'Date', type: FIELD_CLASSIFICATION.DERIVED, source: 'DATE', description: 'Receipt date YYYY-MM-DD' },
+    { target: 'Vendor Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYLEDGERNAME', description: 'Vendor name' },
+    { target: 'GSTIN', type: FIELD_CLASSIFICATION.DIRECT, source: 'PARTYGSTIN', description: 'Vendor GSTIN' },
+    { target: 'Place of Supply', type: FIELD_CLASSIFICATION.DIRECT, source: 'PLACEOFSUPPLY', description: 'Place of supply' },
+    { target: 'Item Name', type: FIELD_CLASSIFICATION.DIRECT, source: 'STOCKITEMNAME', description: 'Stock item name' },
+    { target: 'Quantity', type: FIELD_CLASSIFICATION.DERIVED, source: 'BILLEDQTY', description: 'Received quantity' },
+    { target: 'Rate', type: FIELD_CLASSIFICATION.DERIVED, source: 'RATE', description: 'Item unit rate' },
+    { target: 'Amount', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Line amount' },
+    { target: 'Godown', type: FIELD_CLASSIFICATION.DIRECT, source: 'GODOWNNAME', description: 'Warehouse location' },
+    { target: 'Note Total', type: FIELD_CLASSIFICATION.DERIVED, source: 'AMOUNT', description: 'Note total' },
+    { target: 'Narration', type: FIELD_CLASSIFICATION.DIRECT, source: 'NARRATION', description: 'Receipt narration' }
   ]
+};
+
+// Aliases mapping for common alternative naming in MAPPING_CATALOG
+const MAPPING_ALIASES = {
+  ledgers: 'chart_of_accounts',
+  ledger: 'chart_of_accounts',
+  items: 'stock_items',
+  branches: 'branch',
+  sales_rep: 'sales_representative',
+  sales_representatives: 'sales_representative',
+  cost_centres: 'cost_centers',
+  stock_movement: 'inventory_master',
+  inventorymaster: 'inventory_master'
 };
 
 export class MappingEngine {
@@ -314,7 +417,8 @@ export class MappingEngine {
    * Retrieves field-level mapping definitions for a given dataset
    */
   static getMappingForDataset(datasetKey) {
-    const key = String(datasetKey).toLowerCase().replace(/[-\s]/g, '_');
+    const rawKey = String(datasetKey).toLowerCase().replace(/[-\s]/g, '_');
+    const key = MAPPING_ALIASES[rawKey] || rawKey;
     return MAPPING_CATALOG[key] || null;
   }
 

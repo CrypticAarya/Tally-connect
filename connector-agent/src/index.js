@@ -68,8 +68,9 @@ Usage:
 
 Mode 1: Local Tally Extraction (Default, No Activation Required):
   (no arguments)              Launch interactive dataset extraction UI
-  --export <list>             Extract specified datasets to CSV (e.g. ledgers,customers,trial_balance)
-  --list-datasets             List all 15 available Tally datasets
+  --export <list>             Extract specified datasets (e.g. ledgers,customers,trial_balance)
+  --format <csv|xml|both>     Export format (default: csv)
+  --list-datasets             List all available Tally datasets
   --from-date <YYYY-MM-DD>    Start date for reports (default: 2026-04-01)
   --to-date <YYYY-MM-DD>      End date for reports (default: 2026-09-30)
   --out-dir <directory>       Custom export directory (default: %APPDATA%\\TallyConnect\\exports)
@@ -92,10 +93,10 @@ Mode 2: SaaS Integration (Optional Cloud Linking):
 
   // 2. LIST DATASETS
   if (isListDatasets) {
-    console.log('\n===============================================================');
-    console.log('  AVAILABLE TALLY DATASETS (15 Scope Datasets)');
-    console.log('===============================================================\n');
     const entities = getAllEntities();
+    console.log('\n===============================================================');
+    console.log(`  AVAILABLE TALLY DATASETS (${entities.length} Supported Datasets)`);
+    console.log('===============================================================\n');
     for (const e of entities) {
       const paramStr = e.parameters?.length ? ` (Parameters: ${e.parameters.map(p => p.name).join(', ')})` : '';
       console.log(`  • ${e.id.padEnd(16, ' ')} [${e.category.toUpperCase().padEnd(11, ' ')}] ${e.name}${paramStr}`);

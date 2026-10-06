@@ -174,6 +174,20 @@ for (const key of Object.keys(EXPECTED_SCHEMAS)) {
   console.log(`  ✔ Mapping summary for "${key}": Total=${summary.totalColumns} (Direct=${summary.direct}, Derived=${summary.derived}, Classified=${summary.classified}, Unavailable=${summary.unavailable})`);
 }
 
+// Verify canonical datasets also have full mapping definitions
+const CANONICAL_KEYS = ['groups', 'stock_groups', 'units', 'sales_orders', 'purchase_orders', 'delivery_notes', 'receipt_notes'];
+for (const key of CANONICAL_KEYS) {
+  const summary = MappingEngine.getMappingSummary(key);
+  assert(summary, `Mapping summary for canonical "${key}" exists`);
+  const schema = getSchema(key, 'canonical');
+  assert.strictEqual(
+    summary.totalColumns,
+    schema.columns.length,
+    `Mapping total columns for canonical "${key}" matches schema (${summary.totalColumns} === ${schema.columns.length})`
+  );
+  console.log(`  ✔ Mapping summary for canonical "${key}": Total=${summary.totalColumns} (Direct=${summary.direct}, Derived=${summary.derived}, Classified=${summary.classified})`);
+}
+
 // -----------------------------------------------------------------
 // 3. TDL Builder Explicit Company Binding & Date Ranges
 // -----------------------------------------------------------------
